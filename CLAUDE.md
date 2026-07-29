@@ -34,4 +34,6 @@
 Не перескакивать. После каждой фазы — стоп и отчёт.
 
 ## Текущий статус
-Фаза 0 закрыта (market / competitors / access / gap). Дальше — Фаза 1.
+Фазы 0 и 1 закрыты. Дальше — гейт источников, затем Фаза 2.
+Артефакты: research/{market,competitors,access,gap}.md,
+design/{blueprint,decisions}.md, research/self.md (заведён, пуст).
