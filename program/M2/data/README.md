@@ -87,3 +87,10 @@ python3 build_reference.py
 таблицу sqlite в памяти и печатает контрольные суммы и счётчики дефектов.
 Все числа воспроизводимы: тот же `SEED` в генераторе даёт тот же csv, тот
 же csv даёт тот же вывод `build_reference.py`.
+
+## Проверка строк (сверяется `tools/check_consistency.py`)
+
+| Проверка | Ожидается строк |
+|---|---|
+| `sales_extract_raw.csv` | 20000 |
+| `product_lookup.csv` | 60 |

@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+import csv
 import re
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -226,6 +228,100 @@ def check_step00(blueprint_text: str) -> None:
         ok(f"все {len(module_dirs)} начатых модулей имеют step-00.md")
 
 
+README_CHECK_HEADING = "## Проверка строк"
+TABLE_ROW = re.compile(r"^\|(.+)\|\s*$")
+SQL_AFTER_SPEC = re.compile(r"^(\w+)\s+после\s+(.+)$")
+
+
+def _parse_readme_check_rows(text: str) -> list[tuple[str, int]]:
+    if README_CHECK_HEADING not in text:
+        return []
+    start = text.index(README_CHECK_HEADING)
+    next_heading = text.find("\n## ", start + len(README_CHECK_HEADING))
+    section_text = text[start:] if next_heading == -1 else text[start:next_heading]
+
+    rows: list[tuple[str, int]] = []
+    for line in section_text.splitlines():
+        m = TABLE_ROW.match(line.strip())
+        if not m:
+            continue
+        cells = [c.strip() for c in m.group(1).split("|")]
+        if len(cells) != 2:
+            continue
+        spec, expected = cells
+        if not re.fullmatch(r"\d+", expected):
+            continue  # строка заголовка/разделителя таблицы, не данные
+        rows.append((spec.strip("`"), int(expected)))
+    return rows
+
+
+def _count_csv_rows(path: Path) -> int:
+    with path.open(encoding="utf-8", newline="") as f:
+        return sum(1 for _ in csv.reader(f)) - 1  # минус заголовок
+
+
+def _count_sql_table_rows(data_dir: Path, table: str, files: list[str]) -> int:
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.executescript((data_dir / "schema.sql").read_text(encoding="utf-8"))
+        for fname in files:
+            conn.executescript((data_dir / fname).read_text(encoding="utf-8"))
+        cur = conn.execute(f"SELECT COUNT(*) FROM {table}")
+        return cur.fetchone()[0]
+    finally:
+        conn.close()
+
+
+def check_data_readme_counts() -> None:
+    """Числа, заявленные в program/M*/data/README.md (раздел «Проверка
+    строк»), сверяются с фактическими файлами — тот же класс ошибки, что
+    рассогласование часов/умений: число один раз посчитано руками и
+    разошлось с данными после правки (M3: «17 заказов» осталось в прозе
+    после расширения датасета до 19 строк, найдено вручную одной сессией
+    ревью, не автоматически — отсюда эта проверка)."""
+    if not PROGRAM_DIR.exists():
+        return
+    readmes = sorted(PROGRAM_DIR.glob("M*/data/README.md"))
+    if not readmes:
+        ok("program/M*/data/README.md: файлов не найдено — проверка пропущена")
+        return
+
+    checked = 0
+    for readme in readmes:
+        data_dir = readme.parent
+        rows = _parse_readme_check_rows(readme.read_text(encoding="utf-8"))
+        for spec, expected in rows:
+            checked += 1
+            m = SQL_AFTER_SPEC.match(spec)
+            try:
+                if m:
+                    table = m.group(1)
+                    files = [f.strip().strip("`") for f in m.group(2).split(",")]
+                    actual = _count_sql_table_rows(data_dir, table, files)
+                    label = f"{readme.relative_to(ROOT)}: {spec}"
+                elif spec.endswith(".csv"):
+                    csv_path = data_dir / spec
+                    if not csv_path.exists():
+                        fail(f"{readme.relative_to(ROOT)}: файл {spec} из раздела «Проверка строк» не найден")
+                        continue
+                    actual = _count_csv_rows(csv_path)
+                    label = f"{readme.relative_to(ROOT)}: {spec}"
+                else:
+                    fail(f"{readme.relative_to(ROOT)}: строка «{spec}» не распознана как .csv или '<таблица> после <файлы>'")
+                    continue
+            except Exception as exc:  # noqa: BLE001 — любая ошибка чтения/SQL — это FAIL проверки, не крах скрипта
+                fail(f"{readme.relative_to(ROOT)}: не удалось проверить «{spec}»: {exc}")
+                continue
+
+            if actual != expected:
+                fail(f"{label}: README заявляет {expected} строк, фактически {actual}")
+
+    if checked:
+        ok(f"program/M*/data/README.md: сверено {checked} строк из раздела «Проверка строк» во всех {len(readmes)} файлах")
+    else:
+        ok(f"program/M*/data/README.md: найдено {len(readmes)} файлов, ни один не содержит раздел «Проверка строк»")
+
+
 CODE_FENCE = re.compile(r"```.*?\n(.*?)```", re.DOTALL)
 INLINE_CODE = re.compile(r"`[^`]*`", re.DOTALL)
 
@@ -285,6 +381,7 @@ def main() -> int:
     check_hours(blueprint_text, claude_text)
     check_skill_ids(blueprint_text)
     check_step00(blueprint_text)
+    check_data_readme_counts()
 
     if PROGRAM_DIR.exists():
         step_files = [f for f in PROGRAM_DIR.rglob("*.md") if f.name != "pilot-report.md"]
