@@ -23,8 +23,15 @@ DASH = "\u2013"  # en dash, используется в диапазонах ч�
 
 FORBIDDEN_PHRASES = [
     "понимает", "знает основ", "умеет работать", "имеет представление",
-    "освоил", "разбирается", "давайте", "попробуем", "не пугайтесь",
+    "освоил", "давайте", "попробуем", "не пугайтесь",
     "главное", "!",
+]
+
+# "разбирается" сам по себе — обычный русский глагол («здесь разбирается
+# ошибка» = анализируется), запрещена только конструкция про читателя
+# («разбирается в X» = невыполнимая формулировка «понимает X»).
+FORBIDDEN_PATTERNS = [
+    re.compile(r"разбирается\s+в\b", re.IGNORECASE),
 ]
 
 # POSIX-специфичные инструменты, запрещённые решением 13 (design/decisions.md)
@@ -127,6 +134,7 @@ def check_hours(blueprint_text: str, claude_text: str) -> None:
 SECTION_HEADING = re.compile(r"^## ([A-Z])\. (.+)$", re.MULTILINE)
 ID_ROW = re.compile(r"^\| ([A-Z]\d+) \|", re.MULTILINE)
 DECLARED_TOTAL = re.compile(r"\*\*Итого: (\d+) умений")
+SKILL_HEADER = re.compile(r"^Умение: ([A-Z]\d+)", re.MULTILINE)
 
 
 def check_skill_ids(blueprint_text: str) -> None:
@@ -188,13 +196,18 @@ def check_skill_ids(blueprint_text: str) -> None:
         return
 
     step_files = list(PROGRAM_DIR.rglob("*.md"))
-    corpus = "\n".join(f.read_text(encoding="utf-8") for f in step_files)
+    header_ids: set[str] = set()
+    for f in step_files:
+        header_ids.update(SKILL_HEADER.findall(f.read_text(encoding="utf-8")))
 
-    missing = [i for i in all_ids if not re.search(rf"\b{re.escape(i)}\b", corpus)]
+    # Считаются только ID из шапки "Умение: <ID>" каждого шага, а не всё
+    # тело файла — иначе адреса ячеек Excel (A1, B2, C3...) неотличимы от
+    # ID умений и проверка покрытия перестаёт быть проверкой.
+    missing = [i for i in all_ids if i not in header_ids]
     if missing:
-        fail(f"умения без единого упоминания в program/**/*.md: {', '.join(missing)}")
+        fail(f"умения без шапки 'Умение: <ID>' ни в одном шаге program/**/*.md: {', '.join(missing)}")
     else:
-        ok(f"все {len(all_ids)} умений упомянуты хотя бы в одном файле program/")
+        ok(f"все {len(all_ids)} умений закрыты шапкой 'Умение:' хотя бы одного шага program/")
 
 
 def check_step00(blueprint_text: str) -> None:
@@ -214,23 +227,41 @@ def check_step00(blueprint_text: str) -> None:
 
 
 CODE_FENCE = re.compile(r"```.*?\n(.*?)```", re.DOTALL)
+INLINE_CODE = re.compile(r"`[^`]*`", re.DOTALL)
+
+
+def strip_code(text: str) -> str:
+    """Убирает блоки кода и `инлайн-код` перед проверкой запрещённых слов —
+    она проверяет прозу для читателя, а не код: коды ошибок Excel
+    (`#N/A`, `#REF!`) и ссылки на лист (`Sheet!A:A`) не запрещённые
+    формулировки, даже когда содержат "!" или подстроку из списка."""
+    text = CODE_FENCE.sub("", text)
+    text = INLINE_CODE.sub("", text)
+    return text
 
 
 def check_forbidden(text_files: list[Path]) -> None:
-    """Запрещённые слова — по всему тексту шага (решение из SKILL.md).
-    POSIX-команды — только внутри блоков кода: решение 13 запрещает давать
-    их учащемуся как команду для запуска, а не упоминать в прозе (сам файл
-    решения 13 объясняет peek_clients.py как замену `grep`+`awk`)."""
+    """Запрещённые слова и фразы — только по прозе шага (код исключается,
+    см. strip_code). POSIX-команды — только внутри блоков кода: решение 13
+    запрещает давать их учащемуся как команду для запуска, а не упоминать в
+    прозе (сам файл решения 13 объясняет peek_clients.py как замену
+    `grep`+`awk`)."""
     any_hit = False
     for f in text_files:
         rel = f.relative_to(ROOT)
         text = f.read_text(encoding="utf-8")
+        prose = strip_code(text)
         for phrase in FORBIDDEN_PHRASES:
-            hay = text.lower() if phrase.isalpha() else text
+            hay = prose.lower() if phrase.isalpha() else prose
             needle = phrase.lower() if phrase.isalpha() else phrase
             if needle in hay:
                 any_hit = True
                 fail(f"{rel}: запрещённая формулировка/символ {phrase!r}")
+
+        for pattern in FORBIDDEN_PATTERNS:
+            for m in pattern.finditer(prose):
+                any_hit = True
+                fail(f"{rel}: запрещённая формулировка {m.group(0)!r}")
 
         for block in CODE_FENCE.finditer(text):
             code = block.group(1)
