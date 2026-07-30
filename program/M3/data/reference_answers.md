@@ -51,6 +51,8 @@ ORDER BY customer_id, order_seq;
 
 ### T1. Накопительная сумма completed-заказов по клиенту
 
+Эталон: `a1_task1_running_total.csv` — `step-06.md`.
+
 ```sql
 WITH completed AS (
     SELECT customer_id, order_id, order_date, amount
@@ -81,6 +83,8 @@ ORDER BY customer_id, order_date, order_id;
 
 ### T2. Ранжирование completed-заказов клиента по сумме (убывание)
 
+Эталон: `a1_task2_rank_desc.csv` — `step-06.md`.
+
 ```sql
 WITH completed AS (
     SELECT customer_id, order_id, amount FROM orders WHERE status = 'completed'
@@ -108,6 +112,8 @@ ORDER BY customer_id, rank_in_customer;
 | 12 | 119 | 675.0 | 1 |
 
 ### T3. Разница с предыдущим completed-заказом клиента
+
+Эталон: `a1_task3_lag_diff.csv` — `step-06.md`.
 
 ```sql
 WITH completed AS (
@@ -137,6 +143,8 @@ ORDER BY customer_id, order_date, order_id;
 | 12 | 119 | 2026-05-28 | 675.0 | (пусто) | (пусто) |
 
 ### T4. Накопительное число completed-заказов по городу
+
+Эталон: `a1_task4_city_cumulative.csv` — `step-06.md`.
 
 ```sql
 WITH completed AS (
@@ -170,6 +178,8 @@ ORDER BY city, order_date, order_id;
 
 ### T5. Топ-2 позиции заказа по выручке в каждой категории товаров
 
+Эталон: `a1_task5_top2_category.csv` — `step-06.md`.
+
 ```sql
 WITH revenue AS (
     SELECT oi.order_item_id, oi.product_id, p.category,
@@ -197,6 +207,8 @@ ORDER BY category, rank_in_category;
 | subscription | 1002 | 1 | 850.0 | 2 |
 
 ### T6. Отклонение от общего среднего чека (completed-заказы)
+
+Эталон: `a1_task6_diff_avg.csv` — `step-06.md`.
 
 ```sql
 WITH completed AS (
@@ -264,8 +276,15 @@ customer_id)` без `ORDER BY` даёт на каждой строке итог
 первого заказа, 20 клиентов на когорту; независимые броски на
 активность в месяц+1 и в месяц+2 после когортного месяца).
 
-Запрос параметризован смещением месяца (`+1 month` для M1, `+2 month`
-для M2 — единственное отличие между 1.3 и 1.4):
+Запрос параметризован смещением месяца: `+1 month` для M1, `+2 month`
+для M2 — единственное отличие между 1.3 и 1.4. Ниже он выписан дважды,
+по разу на горизонт, а не один раз со словесной оговоркой: оба варианта
+исполняются `tools/check_consistency.py` и сверяются каждый со своим
+CSV, поэтому правка одного и забытая правка другого не проходят молча.
+
+### M1 (1.3, разобранный пример) — `+1 month`, файл `a3_cohort_retention_m1.csv`
+
+Эталон: `a3_cohort_retention_m1.csv` — `step-07.md`.
 
 ```sql
 WITH first_order AS (
@@ -303,8 +322,6 @@ LEFT JOIN retained r ON r.cohort_month = s.cohort_month
 ORDER BY s.cohort_month;
 ```
 
-### M1 (1.3, разобранный пример) — `+1 month`, файл `a3_cohort_retention_m1.csv`
-
 | cohort_month | cohort_size | retained | retention_pct |
 |---|---|---|---|
 | 2025-01 | 20 | 7 | 35.0 |
@@ -321,6 +338,44 @@ ORDER BY s.cohort_month;
 | 2025-12 | 20 | 5 | 25.0 |
 
 ### M2 (1.4, задание) — `+2 month`, файл `a3_cohort_retention_m2.csv`
+
+Эталон: `a3_cohort_retention_m2.csv` — `step-07.md`.
+
+```sql
+WITH first_order AS (
+    SELECT customer_id, MIN(order_date) AS first_date
+    FROM orders
+    WHERE customer_id > 100
+    GROUP BY customer_id
+),
+cohorts AS (
+    SELECT customer_id, substr(first_date, 1, 7) AS cohort_month
+    FROM first_order
+),
+cohort_size AS (
+    SELECT cohort_month, COUNT(*) AS cohort_size
+    FROM cohorts
+    GROUP BY cohort_month
+),
+target_month_activity AS (
+    SELECT c.cohort_month, c.customer_id
+    FROM cohorts c
+    JOIN orders o ON o.customer_id = c.customer_id
+    WHERE substr(o.order_date, 1, 7) = strftime('%Y-%m', c.cohort_month || '-01', '+2 month')
+    GROUP BY c.cohort_month, c.customer_id
+),
+retained AS (
+    SELECT cohort_month, COUNT(*) AS retained
+    FROM target_month_activity
+    GROUP BY cohort_month
+)
+SELECT s.cohort_month, s.cohort_size,
+       COALESCE(r.retained, 0) AS retained,
+       ROUND(COALESCE(r.retained, 0) * 100.0 / s.cohort_size, 2) AS retention_pct
+FROM cohort_size s
+LEFT JOIN retained r ON r.cohort_month = s.cohort_month
+ORDER BY s.cohort_month;
+```
 
 | cohort_month | cohort_size | retained | retention_pct |
 |---|---|---|---|

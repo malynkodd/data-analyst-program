@@ -381,6 +381,229 @@ def check_data_readme_counts() -> None:
         ok(f"program/M*/data/README.md: найдено {len(readmes)} файлов, ни один не содержит раздел «Проверка строк»")
 
 
+LOAD_ORDER_HEADING = "## Порядок загрузки"
+STEP_CELL = re.compile(r"^`?(step-(\d+)\.md)`?$")
+REFERENCE_MARKER = re.compile(
+    r"^Эталон:\s+`([^`]+\.csv)`\s+[—-]\s+`(step-\d+\.md)`\.?\s*$", re.MULTILINE
+)
+SQL_FENCE = re.compile(r"```sql\n(.*?)```", re.DOTALL)
+
+# Что эта проверка заведомо НЕ покрывает. Печатается в [OK]-строке
+# дословно: зелёный вывод без этого списка читается как полное покрытие
+# эталонов модуля, хотя покрыта только их часть.
+UNCOVERED = (
+    "эталоны PostgreSQL (step-09..step-12 — нужен поднятый сервер, "
+    "числа проверены вручную одним прогоном); activity_log (не "
+    "коммитится, миллионы строк — сверяется через sha256 контрольной точки)"
+)
+
+
+def _parse_load_order(readme_text: str) -> dict[str, list[str]] | None:
+    """Таблица «Порядок загрузки» из program/M*/data/README.md:
+    `<шаг> | <что появляется> | <файлы>`. Возвращает {шаг: [.sql-файлы]}.
+    Не-.sql в третьей колонке (генератор activity_log) отбрасывается — он
+    создаёт таблицу сам, в накопительную сборку базы не входит."""
+    if LOAD_ORDER_HEADING not in readme_text:
+        return None
+    start = readme_text.index(LOAD_ORDER_HEADING)
+    next_heading = readme_text.find("\n## ", start + len(LOAD_ORDER_HEADING))
+    body = readme_text[start:] if next_heading == -1 else readme_text[start:next_heading]
+
+    order: dict[str, list[str]] = {}
+    for line in body.splitlines():
+        m = TABLE_ROW.match(line.strip())
+        if not m:
+            continue
+        cells = [c.strip() for c in m.group(1).split("|")]
+        if len(cells) != 3:
+            continue
+        step_m = STEP_CELL.match(cells[0])
+        if not step_m:
+            continue  # заголовок таблицы или разделитель
+        files = [
+            f.strip().strip("`") for f in cells[2].split(",")
+            if f.strip().strip("`").endswith(".sql")
+        ]
+        order[step_m.group(1)] = files
+    return order
+
+
+def _step_number(step: str) -> int:
+    return int(re.fullmatch(r"step-(\d+)\.md", step).group(1))
+
+
+def _cumulative_sql_files(order: dict[str, list[str]], step: str) -> list[str]:
+    """Файлы всех шагов с номером ≤ номера `step`, в порядке номеров шагов —
+    то состояние базы, в котором учащийся окажется на этом шаге. Шага может
+    не быть в таблице вовсе (шаг ничего не загружает, как step-06.md) — это
+    нормальный случай, а не ошибка: он работает на состоянии предыдущих."""
+    target = _step_number(step)
+    files: list[str] = []
+    for s in sorted(order, key=_step_number):
+        if _step_number(s) <= target:
+            files.extend(order[s])
+    return files
+
+
+def _parse_reference_markers(text: str) -> list[tuple[str, str, str]]:
+    """Маркер `Эталон: <csv> — <шаг>.` привязывает эталонный CSV к первому
+    следующему за ним блоку ```sql. Возвращает [(csv, шаг, запрос)]."""
+    out: list[tuple[str, str, str]] = []
+    for m in REFERENCE_MARKER.finditer(text):
+        fence = SQL_FENCE.search(text, m.end())
+        if fence is None:
+            out.append((m.group(1), m.group(2), ""))
+            continue
+        out.append((m.group(1), m.group(2), fence.group(1)))
+    return out
+
+
+def _cell(value: object) -> str:
+    return "" if value is None else str(value)
+
+
+def check_reference_csv_state() -> None:
+    """Эталонный CSV шага сверяется с результатом эталонного запроса,
+    выполненного на том состоянии базы, которое будет у учащегося именно на
+    этом шаге — накопительно по таблице «Порядок загрузки» из
+    program/M*/data/README.md.
+
+    Ловит ровно один класс дефекта: эталон посчитан на другом состоянии
+    базы, чем то, до которого учащийся дойдёт по инструкциям шагов.
+    Реальная находка: a1_task*.csv (13 строк) посчитаны до retention_seed.sql,
+    а порядок загрузки в первой редакции step-00.md ставил retention_seed.sql
+    в начало модуля — те же запросы дают 360 строк, и все 6 критериев A1
+    провалились бы без единой ошибки учащегося.
+
+    Не покрывает — см. UNCOVERED: PostgreSQL-эталоны (нет сервера),
+    activity_log (не коммитится), эталоны, не выраженные SQL (M0/M1/M2 —
+    вывод скриптов)."""
+    if not PROGRAM_DIR.exists():
+        return
+
+    local_fails: list[str] = []
+
+    def note(msg: str) -> None:
+        """fail() плюс локальный счётчик: [OK]-строка этой проверки не должна
+        печататься, когда часть пар не сошлась, а глобальный FAILED для этого
+        не годится — он уже True из-за известного [FAIL] по непокрытым умениям."""
+        local_fails.append(msg)
+        fail(msg)
+
+    data_dirs = sorted(PROGRAM_DIR.glob("M*/data"))
+    checked = 0
+    modules_with_markers: list[str] = []
+    skipped_modules: list[str] = []
+
+    for data_dir in data_dirs:
+        module = data_dir.parent.name
+        answers = data_dir / "reference_answers.md"
+        markers = _parse_reference_markers(answers.read_text(encoding="utf-8")) if answers.exists() else []
+        has_schema = (data_dir / "schema.sql").exists()
+
+        if not markers:
+            skipped_modules.append(module)
+            if has_schema:
+                note(
+                    f"{module}: в data/ есть schema.sql, но в reference_answers.md "
+                    f"нет ни одного маркера «Эталон: <csv> — <шаг>» — эталоны "
+                    f"SQL-модуля не сверяются с состоянием базы шага"
+                )
+            continue
+
+        modules_with_markers.append(module)
+        readme = data_dir / "README.md"
+        order = _parse_load_order(readme.read_text(encoding="utf-8")) if readme.exists() else None
+        if not order:
+            note(
+                f"{module}: есть маркеры «Эталон:», но в data/README.md нет "
+                f"таблицы «Порядок загрузки» — не из чего собрать состояние базы шага"
+            )
+            continue
+
+        # Эталон без маркера — то же самое, что эталон, никем не проверяемый:
+        # проверка обязана падать, а не тихо покрывать только часть файлов.
+        marked_csv = {csv for csv, _, _ in markers}
+        for csv_path in sorted(data_dir.glob("*.csv")):
+            if csv_path.name not in marked_csv:
+                note(
+                    f"{module}: {csv_path.name} лежит в data/ SQL-модуля, но "
+                    f"не привязан маркером «Эталон:» ни к одному запросу"
+                )
+
+        for csv_name, step, query in markers:
+            checked += 1
+            label = f"{module}: {csv_name} на состоянии базы {step}"
+            csv_path = data_dir / csv_name
+            if not csv_path.exists():
+                note(f"{label}: файл эталона не найден")
+                continue
+            if not query.strip():
+                note(f"{label}: после маркера «Эталон:» нет блока ```sql")
+                continue
+            files_used = _cumulative_sql_files(order, step)
+            if "schema.sql" not in files_used:
+                note(
+                    f"{label}: в накопительном списке файлов до этого шага нет "
+                    f"schema.sql — таблиц в базе не будет вовсе, сверять не с чем"
+                )
+                continue
+
+            try:
+                conn = sqlite3.connect(":memory:")
+                for fname in files_used:
+                    conn.executescript((data_dir / fname).read_text(encoding="utf-8"))
+                cur = conn.execute(query)
+                got_header = [d[0] for d in cur.description]
+                got_rows = [[_cell(v) for v in row] for row in cur.fetchall()]
+                conn.close()
+            except Exception as exc:  # noqa: BLE001 — любая ошибка SQL — FAIL проверки, не крах скрипта
+                note(f"{label}: запрос не выполнился: {exc}")
+                continue
+
+            with csv_path.open(encoding="utf-8", newline="") as f:
+                csv_rows = list(csv.reader(f))
+            if not csv_rows:
+                note(f"{label}: эталонный CSV пуст")
+                continue
+            want_header, want_rows = csv_rows[0], csv_rows[1:]
+
+            if got_header != want_header:
+                note(f"{label}: колонки запроса {got_header} против колонок CSV {want_header}")
+                continue
+            if len(got_rows) != len(want_rows):
+                note(
+                    f"{label}: CSV содержит {len(want_rows)} строк, запрос на "
+                    f"состоянии базы этого шага ({', '.join(files_used)}) дал "
+                    f"{len(got_rows)} — эталон посчитан на другом состоянии базы"
+                )
+                continue
+            for i, (got, want) in enumerate(zip(got_rows, want_rows), start=1):
+                if got != want:
+                    note(f"{label}: строка {i} расходится: запрос {got}, CSV {want}")
+                    break
+
+    uncovered = UNCOVERED + (
+        f"; модули без SQL-эталонов: {', '.join(skipped_modules)}" if skipped_modules else ""
+    )
+    if not checked:
+        ok(
+            "эталоны на состоянии базы своего шага: маркеров «Эталон:» не "
+            f"найдено ни в одном модуле — сверять нечего. НЕ покрыто: {uncovered}"
+        )
+    elif local_fails:
+        print(
+            f"       (сверялось {checked} пар CSV ↔ запрос в модулях: "
+            f"{', '.join(modules_with_markers)}; см. [FAIL] выше)"
+        )
+    else:
+        ok(
+            f"эталоны на состоянии базы своего шага: сверено {checked} пар "
+            f"(CSV ↔ запрос) в модулях: {', '.join(modules_with_markers)}. "
+            f"НЕ покрыто: {uncovered}"
+        )
+
+
 def _load_gitignore_patterns() -> list[str]:
     gi = ROOT / ".gitignore"
     if not gi.exists():
@@ -507,6 +730,7 @@ def main() -> int:
     check_decision_numbering()
     check_step00(blueprint_text)
     check_data_readme_counts()
+    check_reference_csv_state()
     check_data_dir_no_stray_files()
 
     if PROGRAM_DIR.exists():
