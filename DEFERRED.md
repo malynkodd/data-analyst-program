@@ -19,6 +19,8 @@
 | Что отложено | Где заложено |
 |---|---|
 | WSL, macOS, Linux как поддерживаемые платформы | решение 13 и решение 21 (`design/decisions.md`); `program/M0/step-01.md` (инструкция на сбой кодировки написана под `cmd.exe`/`chcp 65001`, разд. 1.6); `program/M0/data/check_env.py` и `program/M0/data/check_console.py` |
+| Кросс-платформенность, которую пять шагов заявляли прозой до решения 21 (формулировки «работает одинаково в PowerShell, Git Bash, WSL и на macOS/Linux» и инструкция по установке PostgreSQL на macOS/Linux). Приведены к Windows 2026-07-30; при возврате универсальности текст правится обратно в этих же местах | `program/M0/step-01.md` (1.2, про UTF-8); `program/M0/step-02.md` (1.2, про замену POSIX-команд); `program/M1/data/peek_clients.py` и `program/M1/step-01.md` (1.3); `program/M1/step-02.md` (1.2, про `git log`); `program/M3/step-09.md` (1.3, шаг 1 «Установка») |
+| Консольный клиент `sqlite3` берётся из Windows-архива `sqlite-tools-win-x64`; путь для других ОС не назван и не проверялся | `program/M3/step-01.md` (1.3, установка клиента); `program/M3/step-00.md` (раздел «SQL-движок»); `design/decisions.md`, решение 15, поправка 2026-07-30 |
 | Docker как способ поставить PostgreSQL и что угодно ещё | решение 19, п. 2 (`design/decisions.md`); `program/M3/step-09.md` — установка идёт zip-архивом бинарников |
 | Power BI Desktop не существует на macOS и Linux — альтернативного BI для них нет | `design/blueprint.md`, часть 2.1 (M4) и часть 3.2 (связь M3 → M4 → M15); `design/decisions.md`, решение 21, п. 1 |
 | Версии и пути автора вместо диапазона поддерживаемых версий (Python, PostgreSQL 17.6, Power BI Desktop, локаль, кодировка консоли) | `program/M0/data/reference_answers.md`; `program/M3/data/README.md`; `program/M3/step-09.md` |
