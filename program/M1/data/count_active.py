@@ -65,9 +65,7 @@ def main():
         if hit:
             count += 1
 
-    # ASCII-вывод намеренно: на части Windows-терминалов консольная
-    # кодовая страница (cp866/cp1251) ломает кириллицу в stdout, и
-    # результат пришлось бы отлаживать вместо того, чтобы читать его.
+    # ASCII-вывод: M0/M1 на латинице по решению 17.
     print(f"rows in input file: {len(rows)}")
     print(f"active by this definition: {count}")
 

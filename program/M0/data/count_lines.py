@@ -25,7 +25,7 @@ def main():
     else:
         count = sum(1 for r in rows if r["status"] == args.status)
 
-    # ASCII-вывод намеренно: см. program/M1/data/count_active.py.
+    # ASCII-вывод: M0/M1 на латинице по решению 17.
     print(f"rows in file: {len(rows)}")
     if args.status is not None:
         print(f"rows with status == {args.status}: {count}")

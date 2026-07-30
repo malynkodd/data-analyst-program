@@ -19,8 +19,7 @@ def main():
     t1 = os.path.getmtime(first)
     t2 = os.path.getmtime(second)
 
-    # ASCII-вывод намеренно: см. count_active.py — кириллица в stdout
-    # ломается частью Windows-консолей (cp866/cp1251).
+    # ASCII-вывод: M0/M1 на латинице по решению 17.
     print(f"{first}: {t1}")
     print(f"{second}: {t2}")
     if t1 < t2:

@@ -20,7 +20,7 @@ def main():
     ap.add_argument("--name", default=None, help="если указано, скрипт напечатает приветствие с этим именем")
     args = ap.parse_args()
 
-    # ASCII-вывод намеренно: см. program/M1/data/count_active.py.
+    # ASCII-вывод: M0/M1 на латинице по решению 17.
     print(f"python: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
     print(f"cwd: {os.getcwd()}")
     if args.name:
