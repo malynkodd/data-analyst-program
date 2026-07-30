@@ -20,6 +20,7 @@ if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
 ROOT = Path(__file__).resolve().parent.parent
 BLUEPRINT = ROOT / "design" / "blueprint.md"
 CLAUDE_MD = ROOT / "CLAUDE.md"
+DECISIONS = ROOT / "design" / "decisions.md"
 PROGRAM_DIR = ROOT / "program"
 
 DASH = "\u2013"  # en dash, используется в диапазонах часов по всему репозиторию
@@ -227,6 +228,63 @@ def check_step00(blueprint_text: str) -> None:
         fail(f"модули без step-00.md: {', '.join(missing)}")
     else:
         ok(f"все {len(module_dirs)} начатых модулей имеют step-00.md")
+
+
+DECISION_HEADING = re.compile(r"^## (\d+)\. ", re.MULTILINE)
+
+
+def check_decision_numbering() -> None:
+    """Номера решений в design/decisions.md идут подряд, с 1, без пропусков
+    и без повторов.
+
+    Дешёвая страховка от уже случившегося: решение 18 (критерий A4) было
+    реализовано в program/M3/step-08.md, но в decisions.md отсутствовало —
+    файл шёл 15, 16, 17 и сразу «Что осталось нерешённым», и пропуск не
+    был виден ниоткуда, потому что следующее решение просто получило бы
+    номер 18 второй раз. Проверяются только заголовки уровня `## N.` —
+    нумерованные списки внутри разделов (например, в «Что осталось
+    нерешённым») под неё не попадают."""
+    if not DECISIONS.exists():
+        fail("design/decisions.md не найден")
+        return
+
+    text = DECISIONS.read_text(encoding="utf-8")
+    numbers = [int(m) for m in DECISION_HEADING.findall(text)]
+    if not numbers:
+        fail("design/decisions.md: не найдено ни одного заголовка вида '## N. ...'")
+        return
+
+    duplicates = sorted({n for n in numbers if numbers.count(n) > 1})
+    if duplicates:
+        fail(
+            f"design/decisions.md: номера решений повторяются: "
+            f"{', '.join(str(n) for n in duplicates)}"
+        )
+
+    expected = list(range(1, len(numbers) + 1))
+    if sorted(numbers) != expected:
+        missing = [n for n in expected if n not in numbers]
+        extra = [n for n in sorted(set(numbers)) if n > len(numbers)]
+        parts = []
+        if missing:
+            parts.append(f"пропущены: {', '.join(str(n) for n in missing)}")
+        if extra:
+            parts.append(f"за пределами диапазона 1..{len(numbers)}: {', '.join(str(n) for n in extra)}")
+        fail(
+            f"design/decisions.md: {len(numbers)} решений, нумерация не сплошная "
+            f"({'; '.join(parts) if parts else 'порядок номеров не 1..N'})"
+        )
+        return
+
+    if numbers != expected:
+        fail(
+            f"design/decisions.md: номера решений идут не по возрастанию: "
+            f"{', '.join(str(n) for n in numbers)}"
+        )
+        return
+
+    if not duplicates:
+        ok(f"design/decisions.md: {len(numbers)} решений, нумерация сплошная 1..{len(numbers)}")
 
 
 README_CHECK_HEADING = "## Проверка строк"
@@ -446,6 +504,7 @@ def main() -> int:
 
     check_hours(blueprint_text, claude_text)
     check_skill_ids(blueprint_text)
+    check_decision_numbering()
     check_step00(blueprint_text)
     check_data_readme_counts()
     check_data_dir_no_stray_files()

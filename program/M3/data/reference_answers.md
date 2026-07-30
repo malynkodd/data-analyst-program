@@ -435,3 +435,167 @@ ORDER BY c.customer_id;
 (`CREATE INDEX idx_activity_customer_date ON activity_log(customer_id,
 event_date);`). Три результата (без индекса / с чужим индексом / со
 своим) побайтово совпадают — индекс меняет только план и время.
+
+---
+
+# Переход на PostgreSQL (`step-09.md`–`step-12.md`)
+
+Все числа этого раздела получены прогоном на **обоих** движках, на одной
+машине, в одном заходе: SQLite 3.45.1 (модуль стандартной библиотеки
+Python 3.11.9) и PostgreSQL 17.6 (x86_64-windows). Датасет тот же:
+`schema.sql` + `seed.sql` + `retention_seed.sql`, перенесённый по
+инструкции `step-09.md`, плюс `activity_log` из `generate_activity_log.py`.
+
+## Перенос (`step-09.md`)
+
+| Проверка | Значение | Совпадает с SQLite |
+|---|---|---|
+| Строк `customers` | 252 | да |
+| Строк `products` | 6 | да |
+| Строк `orders` | 366 | да |
+| Строк `order_items` | 23 | да |
+| Строк `payments` | 13 | да |
+| `SUM(amount)` по всем 366 заказам | 317959.87 | да |
+| `SUM(amount)`, `status='completed' AND order_id < 200` | 8600.00 | да (контрольная сумма модуля из `step-00.md`) |
+| Заказов, где `SUM(quantity*unit_price) <> amount` | 0 | да |
+| Несовпадений инварианта «платёж ⟺ completed» (19 исходных заказов) | 0 | да |
+
+Отображение денежного типа — замер, показывающий цену наивного выбора:
+
+| Тип колонки `amount` в PostgreSQL | `SUM(amount)` по 366 заказам |
+|---|---|
+| `NUMERIC(10,2)` (взято в `schema_pg.sql`) | **317959.87** |
+| `REAL` (буквальный перенос типа из `schema.sql`) | **317959.84** |
+| `DOUBLE PRECISION` | **317959.87000000005** |
+
+В SQLite та же сумма — 317959.87. Построчно ни одно из 366 значений при
+переносе в `REAL` не искажается настолько, чтобы отличаться в двух знаках
+(запрос `WHERE amount <> amount::real::numeric(10,2)` даёт 0 строк) —
+расходится только агрегат.
+
+Порядок загрузки: `customers`, `products`, `orders`, `order_items`,
+`payments`. При нарушении (`order_items` до `products`) PostgreSQL
+отвечает `insert or update on table "order_items" violates foreign key
+constraint "order_items_product_id_fkey"`, `DETAIL: Key (product_id)=(1002)
+is not present in table "products"`, и загружает 0 строк.
+
+Выгрузка `.dump` из SQLite, поданная в `psql`, обрывается на 25-й строке:
+`ERROR: relation "orders" does not exist` — SQLite выдаёт таблицы в
+порядке создания (`customers`, затем `order_items`), а `order_items`
+ссылается на `orders` ниже по файлу. После отката в базе остаётся 0
+таблиц (проверено запросом к `information_schema.tables`). Отдельно:
+`PRAGMA foreign_keys=OFF;` даёт `ERROR: syntax error at or near "PRAGMA"`.
+
+## Девять расхождений диалектов (`step-10.md`)
+
+Все девять проверены выполнением на обоих движках.
+
+| № | Откуда | SQLite | PostgreSQL |
+|---|---|---|---|
+| 1 | `step-02.md` 1.3, `HAVING total > 500` | 7 строк | `ERROR: column "total" does not exist` |
+| 2 | `step-02.md` 1.6, `order_id` мимо `GROUP BY` | 3 строки | `ERROR: column "orders.order_id" must appear in the GROUP BY clause or be used in an aggregate function` |
+| 3 | `step-02.md` 1.6, `WHERE SUM(amount) > 500` | `OperationalError: misuse of aggregate: SUM()` | `ERROR: aggregate functions are not allowed in WHERE` |
+| 4 | `step-01.md` 1.6, `status = "completed"` | 13 | `ERROR: column "completed" does not exist` |
+| 5 | `step-01.md` 1.6, `status LIKE 'COMPLETED'` | **360** | **0, без ошибки** (`ILIKE` даёт 360) |
+| 6 | `step-07.md` 1.3, `substr(order_date, 1, 7)` | `2026-05` | `ERROR: function substr(date, integer, integer) does not exist` |
+| 7 | `step-07.md` 1.3, `strftime('%Y-%m', order_date)` | `2026-05` | `ERROR: function strftime(unknown, date) does not exist` |
+| 8 | `step-06.md` задача 6, `ROUND(AVG(amount), 2)` | 661.54 | 661.54 на `NUMERIC(10,2)`; `ERROR: function round(double precision, integer) does not exist` на `DOUBLE PRECISION` |
+| 9 | `step-08.md` 1.3, `EXPLAIN QUERY PLAN` | план | `ERROR: syntax error at or near "QUERY"` |
+
+Правка расхождения 1 — `HAVING SUM(amount) > 500`; после неё PostgreSQL
+даёт тех же 7 клиентов (1, 2, 3, 5, 8, 9, 12) с суммами 2480.00, 1320.00,
+980.00, 1150.00, 1485.00, 510.00, 675.00.
+
+Зависимость `дата::text` от настройки сервера (почему `to_char` надёжнее
+приведения к тексту): на заказе 103 (дата 2026-06-11) `substr(order_date::text,
+1, 7)` даёт `2026-06` при `DateStyle = ISO, MDY` (по умолчанию),
+`11.06.2` при `German, DMY` и `11/06/2` при `SQL, DMY`. Ошибки нет ни в
+одном случае. `to_char(order_date, 'YYYY-MM')` даёт `2026-06` при всех
+трёх.
+
+## Переносимость A1 (`step-10.md`)
+
+Все 6 запросов задания `step-06.md` и разобранный пример из его 1.3
+выполняются в PostgreSQL **без единой правки синтаксиса** и дают тот же
+результат, что в SQLite. Проверено построчно по всем 6 эталонным CSV
+(`a1_task1_running_total.csv` … `a1_task6_diff_avg.csv`): 13, 13, 13, 13,
+6, 13 строк, расхождение значений 0.
+
+Единственная необходимая правка — не диалектная, а по объёму: после
+`retention_seed.sql` в `orders` 366 строк, и без фильтра `order_id < 200`
+запросы возвращают 360 строк вместо 13 (на обоих движках одинаково).
+
+Сравнение с эталоном — **по значениям, а не побайтово**: `NUMERIC(10,2)`
+печатает `1200.00` там, где SQLite печатает `1200.0`.
+
+## A3 на PostgreSQL (`step-11.md`)
+
+Запрос из `step-07.md` после трёх правок (`substr` → `to_char` в двух
+местах, `strftime(..., '+k month')` → `to_date(...) + INTERVAL 'k month'`)
+даёт те же 12 когорт. Значения совпадают с `a3_cohort_retention_m1.csv` и
+`a3_cohort_retention_m2.csv` полностью; `retention_pct` печатается как
+`35.00` против `35.0` в SQLite (тип, не число).
+
+Вариант через `date_trunc('month', дата)::date` даёт те же 12 строк на
+обоих горизонтах (M1: суммарно 73 вернувшихся; M2: 3, 5, 2, 3, 6, 5, 2,
+1, 1, 2, 2, 2 — совпадает с CSV). `date_trunc` возвращает `timestamp with
+time zone` (проверено `pg_typeof`), отсюда необходимость `::date`.
+
+Числа для типичных ошибок шага:
+
+| Ошибка | Результат |
+|---|---|
+| `to_date(cohort_month,'YYYY-MM') + 1` вместо `+ INTERVAL '1 month'` | `retained` = 20 во всех 12 когортах (100.00%) вместо 7, 8, 4, 6, 8, 5, 7, 8, 7, 4, 4, 5 |
+| `DATE '2025-01-15' + 1` | `2025-01-16` (день, не месяц) |
+| `DATE '2025-01-15' + INTERVAL '1 month'` | `2025-02-15 00:00:00` |
+
+Числа для типичных ошибок `step-07.md` (те же на обоих движках —
+свойство датасета, не движка):
+
+| Ошибка | Результат |
+|---|---|
+| «вернулся когда-либо после первого заказа» вместо точного месяца | по 12 когортам 8, 11, 6, 8, 11, 10, 9, 9, 8, 5, 4, 7; для `2025-05` это 11 против верных 6 на горизонте M2 |
+| группировка по `first_date` целиком (день, а не месяц) | 178 когорт вместо 12 (столько различных дней у первых заказов 240 клиентов) |
+
+## A4 на PostgreSQL (`step-12.md`)
+
+Перенос `activity_log`: выгрузка в CSV 4.4 с, файл 160 МБ, загрузка
+`\copy` — 12.1 с, вывод `COPY 4800000`.
+
+Парные замеры, одна машина, 4 800 000 строк:
+
+| Замер | SQLite 3.45.1 | PostgreSQL 17.6 |
+|---|---|---|
+| Запрос 1.3 (`login`), без индексов | 57.378 с | 53.594 с |
+| Запрос 1.3, индекс `(customer_id, event_type)` | 0.034 с | 0.045 с |
+| Ускорение 1.3 | ×1665 | ×1191 |
+| Запрос 1.4 (июнь), без индексов | 57.122 с | 65.097 с |
+| Запрос 1.4, «чужой» индекс `(customer_id, event_type)` | 12.363 с (×4.6) | 11.515 с (×5.7) |
+| Запрос 1.4, индекс `(customer_id, event_date)` | 0.018 с | 0.020 с |
+| Ускорение 1.4 | ×3258 | ×3255 |
+| Построение индекса `(customer_id, event_type)` | 2.55 с | 2.21 с |
+| Построение индекса `(customer_id, event_date)` | 2.91 с | 1.91 с |
+
+Замеры SQLite в этой таблице сделаны заново, на той же машине, что и
+замеры PostgreSQL, — поэтому они отличаются от чисел раздела «A4» выше
+(70.66 с / 0.044 с, другая машина и другой заход). Совпадает то, что
+проверяется критерием: план запроса и порядок ускорения.
+
+Планы для `activity_log` (запрос 1.4):
+
+| Состояние | SQLite (`EXPLAIN QUERY PLAN`) | PostgreSQL (`EXPLAIN (ANALYZE)`) |
+|---|---|---|
+| Без индексов | `SCAN a` | `Seq Scan on activity_log a`, `loops=252`, `actual rows=1564`, `Rows Removed by Filter: 4798436` |
+| «Чужой» индекс | `SEARCH a USING INDEX idx_activity_customer_type (customer_id=?)` | `Bitmap Heap Scan`, ниже `Bitmap Index Scan on idx_activity_customer_type`, `Rows Removed by Filter: 17484`, `Heap Blocks: exact=3577826` |
+| Нужный индекс | `SEARCH a USING COVERING INDEX idx_activity_customer_date (customer_id=? AND event_date>? AND event_date<?)` | `Index Only Scan using idx_activity_customer_date`, `Heap Fetches: 0` |
+
+`EXPLAIN (ANALYZE)` на запросе без индекса занял 65.107 с — столько же,
+сколько сам запрос (65.097 с): `ANALYZE` означает реальное выполнение.
+
+Результат (252 строки) идентичен во всех шести замерах на обоих движках.
+
+Тип `event_date` при переносе: `TEXT` и `DATE` дают одинаковый результат
+на `BETWEEN '2025-06-01' AND '2025-06-30'` (проверено на клиентах 1, 2,
+340: 1550, 1582, 1561 события в обоих вариантах) — совпадение держится
+только на формате `ГГГГ-ММ-ДД`, где лексикографический порядок совпадает
+с хронологическим. В `step-12.md` берётся `DATE`.
