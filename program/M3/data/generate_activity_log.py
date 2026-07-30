@@ -15,10 +15,16 @@ blueprint запрещает файлы >50 МБ в git). Скрипт созд�
 Второй аргумент (необязательный) — число строк, по умолчанию 4 800 000
 (см. `step-08.md`, 1.5: если замер без индекса на вашей машине быстрее
 3 с, порог не проверяет ничего — увеличьте это число, например вдвое, и
-перегенерируйте). sha256 первых 1000 строк не зависит от общего числа
-строк (тот же зафиксированный `SEED`, та же последовательность
-`random` до 1000-й строки) — контрольная точка в `reference_answers.md`
-остаётся верна при любом N; меняется только само число строк.
+перегенерируйте). sha256 первых `CHECK_ROWS` строк не зависит от
+общего числа строк — **но только пока строки пишутся одним
+последовательным циклом `for i in range(1, N+1)` без перемешивания и
+без вычисления чего-либо (включая `event_date`) из общего числа строк
+`n_rows_target`.** Если это когда-нибудь изменится (перемешивание
+порядка вставки, дата, зависящая от `N`, разбиение на батчи с
+собственным состоянием ГПСЧ на батч и т.п.) — инвариант «хэш не
+зависит от N» ломается молча, и это нужно проверить заново, а не
+считать гарантией навсегда. При `n_rows_target < CHECK_ROWS`
+контрольная точка не определена — см. поведение в `main()`.
 """
 from __future__ import annotations
 
@@ -88,21 +94,36 @@ def main() -> None:
     cur.execute("SELECT COUNT(*) FROM activity_log")
     n_rows = cur.fetchone()[0]
 
+    print(f"activity_log: {n_rows} строк, без индекса на customer_id (сделано намеренно, умение A4)")
+
     # Контрольная точка (правило раздела 1.3 curriculum-design для
     # локально генерируемых, не коммитящихся датасетов): сверяется до
     # решения задач шага, а не после первого непонятного результата.
-    cur.execute(
-        f"SELECT log_id, customer_id, event_type, event_date "
-        f"FROM activity_log ORDER BY log_id LIMIT {CHECK_ROWS}"
-    )
-    first_rows = cur.fetchall()
-    digest_input = "\n".join("|".join(str(v) for v in row) for row in first_rows)
-    checksum = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
-
-    print(f"activity_log: {n_rows} строк, без индекса на customer_id (сделано намеренно, умение A4)")
-    print(f"sha256 первых {CHECK_ROWS} строк (ORDER BY log_id): {checksum}")
-    print("Сверьте оба числа с program/M3/data/reference_answers.md, раздел «A4», "
-          "до того как приступать к задачам step-08.md.")
+    # Граничный случай: меньше CHECK_ROWS строк в таблице — контрольная
+    # точка не определена (хэш "первых 1000 строк" от неполного набора
+    # был бы не тем, с чем сравнивает reference_answers.md, и тихое
+    # несовпадение выглядело бы как повреждённые данные, а не как
+    # маленький прогон) — явное сообщение вместо падения или обмана.
+    if n_rows < CHECK_ROWS:
+        print(
+            f"Строк меньше {CHECK_ROWS} — контрольная точка (sha256 первых "
+            f"{CHECK_ROWS} строк) не определена, сравнение с "
+            f"reference_answers.md невозможно. Для step-08.md нужен объём "
+            f"порядка миллионов строк — если {n_rows} строк получены "
+            f"намеренно (например, для отладки самого генератора), это "
+            f"ожидаемо; если нет — проверьте аргумент числа строк."
+        )
+    else:
+        cur.execute(
+            f"SELECT log_id, customer_id, event_type, event_date "
+            f"FROM activity_log ORDER BY log_id LIMIT {CHECK_ROWS}"
+        )
+        first_rows = cur.fetchall()
+        digest_input = "\n".join("|".join(str(v) for v in row) for row in first_rows)
+        checksum = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
+        print(f"sha256 первых {CHECK_ROWS} строк (ORDER BY log_id): {checksum}")
+        print("Сверьте оба числа с program/M3/data/reference_answers.md, раздел «A4», "
+              "до того как приступать к задачам step-08.md.")
     conn.close()
 
 
