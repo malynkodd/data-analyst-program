@@ -1,0 +1,7 @@
+category,product_id,order_item_id,revenue,rank_in_category
+addon,1004,21,410.0,1
+addon,1004,17,330.0,2
+service,1005,13,390.0,1
+service,1005,2,350.0,2
+subscription,1002,9,980.0,1
+subscription,1002,1,850.0,2
