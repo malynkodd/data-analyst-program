@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import csv
+import fnmatch
 import re
 import sqlite3
 import sys
@@ -322,6 +323,71 @@ def check_data_readme_counts() -> None:
         ok(f"program/M*/data/README.md: найдено {len(readmes)} файлов, ни один не содержит раздел «Проверка строк»")
 
 
+def _load_gitignore_patterns() -> list[str]:
+    gi = ROOT / ".gitignore"
+    if not gi.exists():
+        return []
+    return [
+        line.strip() for line in gi.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
+def _matches_gitignore(rel_path: Path, patterns: list[str]) -> bool:
+    """Упрощённое сопоставление с .gitignore: не полный синтаксис (нет
+    отрицаний `!`, нет привязки паттернов с `/` строго к корню) — для
+    текущего .gitignore этого репозитория (несколько плоских glob-паттернов)
+    этого достаточно; если .gitignore обрастёт вложенными/анкорными
+    паттернами, эту функцию придётся расширять, а не просто доверять ей."""
+    name = rel_path.name
+    posix = rel_path.as_posix()
+    for pat in patterns:
+        pat = pat.rstrip("/")
+        if fnmatch.fnmatch(name, pat) or fnmatch.fnmatch(posix, pat) or fnmatch.fnmatch(posix, f"*/{pat}"):
+            return True
+    return False
+
+
+def check_data_dir_no_stray_files() -> None:
+    """Файлы в program/M*/data/, не упомянутые ни в README.md той же папки,
+    ни покрытые .gitignore, — вероятный случайный артефакт: например, файл
+    с именем `--help`, который sqlite3.connect создаёт молча, если аргумент
+    argparse не распознан как флаг и попадает в позиционный путь к базе
+    (реальная находка при ревью generate_activity_log.py, не гипотетическая).
+    Проверка — по названию файла как подстроке текста README, тот же
+    формат, в котором все текущие data/README.md перечисляют свои файлы
+    (таблица «Файлы»)."""
+    if not PROGRAM_DIR.exists():
+        return
+    data_dirs = sorted(PROGRAM_DIR.glob("M*/data"))
+    if not data_dirs:
+        ok("program/M*/data/: директорий не найдено — проверка на мусор пропущена")
+        return
+
+    patterns = _load_gitignore_patterns()
+    checked = 0
+    stray: list[str] = []
+    for data_dir in data_dirs:
+        readme_path = data_dir / "README.md"
+        readme_text = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
+        for f in sorted(data_dir.iterdir()):
+            if f.is_dir() or f.name == "README.md":
+                continue
+            checked += 1
+            rel = f.relative_to(ROOT)
+            if _matches_gitignore(rel, patterns):
+                continue
+            if f.name in readme_text:
+                continue
+            stray.append(str(rel))
+
+    if stray:
+        for rel in stray:
+            fail(f"{rel}: не упомянут в README.md своей папки и не покрыт .gitignore — похоже на случайный артефакт")
+    else:
+        ok(f"program/M*/data/: проверено {checked} файлов в {len(data_dirs)} папках, ни одного не покрытого README/.gitignore не найдено")
+
+
 CODE_FENCE = re.compile(r"```.*?\n(.*?)```", re.DOTALL)
 INLINE_CODE = re.compile(r"`[^`]*`", re.DOTALL)
 
@@ -382,6 +448,7 @@ def main() -> int:
     check_skill_ids(blueprint_text)
     check_step00(blueprint_text)
     check_data_readme_counts()
+    check_data_dir_no_stray_files()
 
     if PROGRAM_DIR.exists():
         step_files = [f for f in PROGRAM_DIR.rglob("*.md") if f.name != "pilot-report.md"]

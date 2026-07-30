@@ -1,2 +1,8 @@
 
 .claude/settings.local.json
+
+# Локальные SQLite-базы, которые учащийся/автор строит из schema.sql +
+# seed.sql (+ генераторы) — эталоны фиксируются кодом, не файлом базы.
+*.db
+__pycache__/
+*.pyc

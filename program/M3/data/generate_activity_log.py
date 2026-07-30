@@ -11,6 +11,7 @@ blueprint запрещает файлы >50 МБ в git). Скрипт созд�
 Запуск:
     python program/M3/data/generate_activity_log.py m3.db
     python program/M3/data/generate_activity_log.py m3.db 9600000  # больше строк
+    python program/M3/data/generate_activity_log.py --help
 
 Второй аргумент (необязательный) — число строк, по умолчанию 4 800 000
 (см. `step-08.md`, 1.5: если замер без индекса на вашей машине быстрее
@@ -28,10 +29,12 @@ blueprint запрещает файлы >50 МБ в git). Скрипт созд�
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import random
 import sqlite3
 import sys
+from pathlib import Path
 
 if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -43,14 +46,48 @@ CHECK_ROWS = 1000  # сколько первых строк хэшировать
 
 
 def main() -> None:
-    if len(sys.argv) not in (2, 3):
-        print("Использование: python generate_activity_log.py <путь_к_m3.db> [число_строк]")
-        raise SystemExit(1)
-    db_path = sys.argv[1]
-    n_rows_target = int(sys.argv[2]) if len(sys.argv) == 3 else N_ROWS
+    # argparse, а не ручной разбор sys.argv: ручной разбор трактовал
+    # --help как путь к базе (sqlite3.connect создаёт файл с таким именем
+    # вместо того, чтобы показать справку) — реальная находка при ревью,
+    # не гипотетическая. argparse даёт --help бесплатно и корректно.
+    ap = argparse.ArgumentParser(
+        description="Создаёт таблицу activity_log (умение A4, m3.db уже должна "
+                     "содержать schema.sql + seed.sql + retention_seed.sql)."
+    )
+    ap.add_argument("db_path", help="путь к m3.db (файл должен уже существовать)")
+    ap.add_argument(
+        "n_rows", nargs="?", type=int, default=N_ROWS,
+        help=f"число строк activity_log (по умолчанию {N_ROWS})",
+    )
+    args = ap.parse_args()
 
-    conn = sqlite3.connect(db_path)
+    db_path = Path(args.db_path)
+    # Проверка ДО подключения: sqlite3.connect создаёт пустой файл по
+    # несуществующему пути молча — на голом --help или на опечатке в
+    # пути это оставляет мусорный файл вместо понятной ошибки.
+    if not db_path.exists():
+        print(
+            f"Файл базы {db_path} не найден. Сначала создайте его и "
+            f"загрузите схему: sqlite3 {db_path} \".read schema.sql\", "
+            f"затем \".read seed.sql\" и \".read retention_seed.sql\"."
+        )
+        raise SystemExit(1)
+
+    conn = sqlite3.connect(str(db_path))
     cur = conn.cursor()
+
+    # Таблицы нет вовсе (schema.sql не загружен) — не то же самое, что
+    # таблица есть, но пуста (seed.sql не загружен): разные причины,
+    # разное сообщение. Первое — самая частая ошибка порядка запуска.
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customers'")
+    if cur.fetchone() is None:
+        print(
+            f"В {db_path} нет таблицы customers — schema.sql ещё не "
+            f"загружен. Сначала: sqlite3 {db_path} \".read schema.sql\"."
+        )
+        conn.close()
+        raise SystemExit(1)
+
     # ORDER BY обязателен: без него порядок строк, который вернёт SQLite,
     # не гарантирован спецификацией (на практике совпадает с rowid, но
     # генератор должен быть детерминирован по определению, а не "почти
@@ -59,8 +96,15 @@ def main() -> None:
     cur.execute("SELECT customer_id FROM customers ORDER BY customer_id")
     customer_ids = [row[0] for row in cur.fetchall()]
     if not customer_ids:
-        print("Таблица customers пуста — сначала загрузите schema.sql, seed.sql, retention_seed.sql")
+        print(
+            f"Таблица customers в {db_path} есть, но пуста — seed.sql (и, "
+            f"для полного набора клиентов, retention_seed.sql) ещё не "
+            f"загружены: sqlite3 {db_path} \".read seed.sql\"."
+        )
+        conn.close()
         raise SystemExit(1)
+
+    n_rows_target = args.n_rows
 
     cur.execute("DROP TABLE IF EXISTS activity_log")
     cur.execute(
