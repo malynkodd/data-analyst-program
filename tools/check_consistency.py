@@ -124,13 +124,64 @@ def check_hours(blueprint_text: str, claude_text: str) -> None:
             )
 
 
-def check_skill_coverage(blueprint_text: str) -> None:
+SECTION_HEADING = re.compile(r"^## ([A-Z])\. (.+)$", re.MULTILINE)
+ID_ROW = re.compile(r"^\| ([A-Z]\d+) \|", re.MULTILINE)
+DECLARED_TOTAL = re.compile(r"\*\*Итого: (\d+) умений")
+
+
+def check_skill_ids(blueprint_text: str) -> None:
+    """Число умений и деление на "рыночные" (топ-15) и "вне топ-15" секции —
+    берётся не из захардкоженного списка букв, а из самого текста части 1:
+    заголовок секции содержит "вне топ-15" ровно тогда, когда её ID не входят
+    в заявленный итог. Ошибка того же класса, что и с часами: число посчитано
+    один раз руками и разошлось с построчной суммой при правках."""
     part1 = section(blueprint_text, "# ЧАСТЬ 1.", "# ЧАСТЬ 2.")
-    ids = sorted(set(re.findall(r"^\| ([A-J]\d) \|", part1, re.MULTILINE)))
-    if not ids:
-        fail("часть 1 blueprint: не найдено ни одного ID умения")
+
+    headings = list(SECTION_HEADING.finditer(part1))
+    if not headings:
+        fail("часть 1 blueprint: не найдено ни одной секции '## X. ...'")
         return
-    ok(f"часть 1: найдено {len(ids)} умений ({ids[0]}..{ids[-1]})")
+
+    in_scope_ids: list[str] = []
+    out_of_scope_ids: list[str] = []
+    for idx, h in enumerate(headings):
+        body_start = h.end()
+        body_end = headings[idx + 1].start() if idx + 1 < len(headings) else len(part1)
+        body = part1[body_start:body_end]
+        ids_here = ID_ROW.findall(body)
+        if "вне топ-15" in h.group(2):
+            out_of_scope_ids.extend(ids_here)
+        else:
+            in_scope_ids.extend(ids_here)
+
+    all_ids = sorted(set(in_scope_ids) | set(out_of_scope_ids))
+    if not all_ids:
+        fail("часть 1 blueprint: не найдено ни одного ID умения внутри секций")
+        return
+
+    m = DECLARED_TOTAL.search(part1)
+    if not m:
+        fail("часть 1: не найдена строка '**Итого: N умений.**'")
+    else:
+        declared = int(m.group(1))
+        actual = len(set(in_scope_ids))
+        if declared == actual:
+            ok(
+                f"часть 1: заявлено {declared} умений, построчный подсчёт по "
+                f"секциям без пометки 'вне топ-15' совпадает"
+            )
+        else:
+            fail(
+                f"часть 1 заявляет 'Итого: {declared} умений', а построчный "
+                f"подсчёт по секциям без пометки 'вне топ-15' даёт {actual} "
+                f"(секции 'вне топ-15' дают ещё {len(set(out_of_scope_ids))}: "
+                f"{', '.join(sorted(set(out_of_scope_ids)))})"
+            )
+
+    ok(
+        f"часть 1: всего {len(all_ids)} ID умений во всех секциях "
+        f"({all_ids[0]}..{all_ids[-1]}), включая 'вне топ-15'"
+    )
 
     if not PROGRAM_DIR.exists():
         fail("program/ не существует — покрытие умений проверить нечем")
@@ -139,11 +190,11 @@ def check_skill_coverage(blueprint_text: str) -> None:
     step_files = list(PROGRAM_DIR.rglob("*.md"))
     corpus = "\n".join(f.read_text(encoding="utf-8") for f in step_files)
 
-    missing = [i for i in ids if not re.search(rf"\b{re.escape(i)}\b", corpus)]
+    missing = [i for i in all_ids if not re.search(rf"\b{re.escape(i)}\b", corpus)]
     if missing:
         fail(f"умения без единого упоминания в program/**/*.md: {', '.join(missing)}")
     else:
-        ok(f"все {len(ids)} умений упомянуты хотя бы в одном файле program/")
+        ok(f"все {len(all_ids)} умений упомянуты хотя бы в одном файле program/")
 
 
 def check_step00(blueprint_text: str) -> None:
@@ -201,7 +252,7 @@ def main() -> int:
     claude_text = CLAUDE_MD.read_text(encoding="utf-8")
 
     check_hours(blueprint_text, claude_text)
-    check_skill_coverage(blueprint_text)
+    check_skill_ids(blueprint_text)
     check_step00(blueprint_text)
 
     if PROGRAM_DIR.exists():
