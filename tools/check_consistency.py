@@ -287,6 +287,63 @@ def check_decision_numbering() -> None:
         ok(f"design/decisions.md: {len(numbers)} решений, нумерация сплошная 1..{len(numbers)}")
 
 
+DEFERRED = ROOT / "DEFERRED.md"
+BACKTICKED = re.compile(r"`([^`]+)`")
+
+
+def _looks_like_repo_path(token: str) -> bool:
+    """Отличает путь от прочего инлайн-кода в той же колонке (`chcp 65001`,
+    `core.autocrlf`): путь либо содержит `/`, либо имеет расширение файла
+    репозитория."""
+    return "/" in token or token.endswith((".md", ".py"))
+
+
+def check_deferred_paths() -> None:
+    """Каждая строка DEFERRED.md называет место в репозитории, и это место
+    существует.
+
+    Файл заведён решением 21 ради одного свойства: возврат отложенного
+    должен быть проходом по списку, а не поиском по репозиторию. Свойство
+    держится только на том, что колонка «Где заложено» указывает на живой
+    файл. Строка без пути бесполезна сразу, строка с путём, который
+    переименовали, — через несколько заходов и молча; сам файл это правило
+    декларирует («Пустая колонка «Где заложено» — дефект строки»), но
+    декларация без проверки живёт до первого захода, в котором про неё
+    забудут (решение 20). Номера решений в той же колонке не проверяются —
+    их сплошность закрывает check_decision_numbering()."""
+    if not DEFERRED.exists():
+        fail("DEFERRED.md не найден, хотя на него ссылаются CLAUDE.md и решение 21")
+        return
+
+    rows = [
+        line for line in DEFERRED.read_text(encoding="utf-8").splitlines()
+        if line.startswith("|") and not re.match(r"^\|[\s:\-|]+\|?$", line)
+    ]
+    checked_rows = checked_paths = 0
+    broken = False
+    for row in rows:
+        cells = [c.strip() for c in row.strip("|").split("|")]
+        if len(cells) < 2 or cells[1] == "Где заложено":  # заголовок таблицы
+            continue
+        checked_rows += 1
+        label = cells[0][:60]
+        paths = [t for t in BACKTICKED.findall(cells[1]) if _looks_like_repo_path(t)]
+        if not paths:
+            broken = True
+            fail(f"DEFERRED.md: строка {label!r} не называет ни одного файла репозитория")
+            continue
+        for path in paths:
+            checked_paths += 1
+            if not (ROOT / path).exists():
+                broken = True
+                fail(f"DEFERRED.md: строка {label!r} ссылается на {path} — такого файла нет")
+
+    if checked_rows == 0:
+        fail("DEFERRED.md: не найдено ни одной строки таблицы отложенного")
+    elif not broken:
+        ok(f"DEFERRED.md: {checked_rows} строк отложенного, все {checked_paths} путей существуют")
+
+
 README_CHECK_HEADING = "## Проверка строк"
 TABLE_ROW = re.compile(r"^\|(.+)\|\s*$")
 SQL_AFTER_SPEC = re.compile(r"^(\w+)\s+после\s+(.+)$")
@@ -728,6 +785,7 @@ def main() -> int:
     check_hours(blueprint_text, claude_text)
     check_skill_ids(blueprint_text)
     check_decision_numbering()
+    check_deferred_paths()
     check_step00(blueprint_text)
     check_data_readme_counts()
     check_reference_csv_state()
