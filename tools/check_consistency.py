@@ -62,6 +62,16 @@ def ok(msg: str) -> None:
     print(f"[OK]   {msg}")
 
 
+def warn(msg: str) -> None:
+    """Предупреждение: печатается, но прогон не роняет. Для случаев, где
+    факт возможен и честен, но обязан быть замечен, а не принят за успех
+    (решение 24: сумма часов, совпавшая с вилкой по обеим границам).
+    [FAIL] здесь был бы вреден — он создаёт стимул подвинуть честное
+    число ради зелёного вывода, то есть ровно ту подгонку, против которой
+    проверка и заводится."""
+    print(f"[WARN] {msg}")
+
+
 def parse_range(text: str) -> tuple[int, int] | None:
     """'7–9' -> (7, 9); '8' -> (8, 8); нечисловое -> None."""
     text = text.strip()
@@ -139,6 +149,161 @@ SECTION_HEADING = re.compile(r"^## ([A-Z])\. (.+)$", re.MULTILINE)
 ID_ROW = re.compile(r"^\| ([A-Z]\d+) \|", re.MULTILINE)
 DECLARED_TOTAL = re.compile(r"\*\*Итого: (\d+) умений")
 SKILL_HEADER = re.compile(r"^Умение: ([A-Z]\d+)", re.MULTILINE)
+# Инфраструктурный шаг (решение 23): установка инструмента, перенос данных
+# между движками, настройка окружения. Умения не несёт и в покрытии не
+# участвует, но пометка обязательна — шаг без строки "Умение:" вовсе
+# считается дефектом, а не третьим, молчаливым вариантом.
+INFRA_HEADER = re.compile(r"^Умение:\s*[—–-]\s*\(инфраструктура\)", re.MULTILINE)
+STEP_FILE = re.compile(r"^step-(\d+)\.md$")
+
+
+def _content_steps() -> list[Path]:
+    """Содержательные шаги: program/M*/step-NN.md с NN > 0. step-00.md —
+    служебная декларация модуля, а не шаг, и строки 'Умение:' не имеет."""
+    out: list[Path] = []
+    for f in sorted(PROGRAM_DIR.glob("M*/step-*.md")):
+        m = STEP_FILE.match(f.name)
+        if m and int(m.group(1)) > 0:
+            out.append(f)
+    return out
+
+
+def check_step_skill_header() -> None:
+    """Каждый содержательный шаг объявляет, к какому из двух видов он
+    относится: несёт умение (ID из части 1 blueprint) или инфраструктурный
+    (решение 23). Молчание — [FAIL].
+
+    До решения 23 отсутствие ID означало, что шага не должно существовать,
+    и инфраструктурный шаг приходилось приписывать к умению: step-09.md
+    (установка PostgreSQL и перенос данных) был объявлен «частью 6 из 7»
+    умения A2, после чего пять шагов из семи продолжали писать «часть N из
+    5», а два шага одновременно называли себя финальной частью A2."""
+    if not PROGRAM_DIR.exists():
+        return
+    steps = _content_steps()
+    if not steps:
+        ok("program/M*/step-NN.md: содержательных шагов не найдено — проверка пропущена")
+        return
+
+    infra: list[str] = []
+    silent: list[str] = []
+    with_skill = 0
+    for f in steps:
+        text = f.read_text(encoding="utf-8")
+        if INFRA_HEADER.search(text):
+            infra.append(f.relative_to(ROOT).as_posix())
+        elif SKILL_HEADER.search(text):
+            with_skill += 1
+        else:
+            silent.append(f.relative_to(ROOT).as_posix())
+
+    for rel in silent:
+        fail(
+            f"{rel}: нет строки 'Умение: <ID>' и нет пометки "
+            f"'Умение: — (инфраструктура)' — шаг не объявил, несёт он умение "
+            f"или нет (решение 23)"
+        )
+    if not silent:
+        tail = f"инфраструктурные: {', '.join(infra)}" if infra else "инфраструктурных нет"
+        ok(
+            f"program/M*/step-NN.md: все {len(steps)} шагов объявили вид — "
+            f"{with_skill} с умением, {len(infra)} без; {tail}"
+        )
+
+
+STEP_HOURS = re.compile(rf"^Время:\s*([\d.]+){DASH}([\d.]+)\s*ч", re.MULTILINE)
+MODULE_ROW_ID = re.compile(r"^(M\d+)\b")
+
+
+def _fmt(x: float) -> str:
+    return f"{x:g}"
+
+
+def check_module_hours(blueprint_text: str) -> None:
+    """Построчная сумма часов шагов модуля против вилки части 6.1 blueprint.
+
+    Решение 24: сумма шагов — факт, вилка — оценка; при расхождении
+    правится вилка, а не часы в шагах. Отсюда две ситуации, которые
+    проверка обязана называть вслух, и обе — [WARN], не [FAIL]: обе
+    возможны честно, но обе обязаны быть замечены.
+
+    (а) Сумма совпала с вилкой по **обеим** границам. Независимые оценки в
+    заданный интервал обеими границами не попадают: M0 дал 7.0–9.0 при
+    вилке 7–9, M1 — 8.0–10.0 при 8–10, M2 — 30.0–40.0 при 30–40, и метод
+    был назван в самих файлах («без запаса на обеих границах», «тот же
+    стиль сведения»). Подогнанная сумма уничтожает данные для калибровки
+    по research/self.md до того, как они появятся.
+
+    (б) Сумма целиком вне вилки — то, что случилось с M3 (37–47 при
+    60–80). Это сигнал сначала искать недостающее содержание (там его и
+    нашли: шаги 09–12 довели сумму до 60–77), и только потом править
+    вилку."""
+    if not PROGRAM_DIR.exists():
+        return
+
+    part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
+    brackets: dict[str, tuple[int, int]] = {}
+    for line in part61.splitlines():
+        if not line.startswith("|") or re.match(r"^\|[\s:\-|]+\|?$", line):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        m = MODULE_ROW_ID.match(cells[0].strip("*"))
+        rng = parse_range(cells[1])
+        if m and rng:
+            brackets[m.group(1)] = rng
+
+    module_dirs = sorted(
+        (p for p in PROGRAM_DIR.iterdir() if p.is_dir() and re.fullmatch(r"M\d+", p.name)),
+        key=lambda p: int(p.name[1:]),
+    )
+    if not module_dirs:
+        return
+
+    reported = 0
+    for d in module_dirs:
+        steps = [f for f in _content_steps() if f.parent == d]
+        pairs: list[tuple[float, float]] = []
+        no_hours: list[str] = []
+        for f in steps:
+            m = STEP_HOURS.search(f.read_text(encoding="utf-8"))
+            if m:
+                pairs.append((float(m.group(1)), float(m.group(2))))
+            else:
+                no_hours.append(f.name)
+        if no_hours:
+            fail(f"{d.name}: шаги без разбираемой строки 'Время: N{DASH}M ч': {', '.join(no_hours)}")
+            continue
+        if not pairs:
+            continue
+        low = sum(p[0] for p in pairs)
+        high = sum(p[1] for p in pairs)
+        bracket = brackets.get(d.name)
+        if bracket is None:
+            fail(f"{d.name}: в части 6.1 blueprint нет строки с вилкой часов для этого модуля")
+            continue
+        b_low, b_high = bracket
+        reported += 1
+        label = (
+            f"{d.name}: сумма {len(pairs)} шагов {_fmt(low)}{DASH}{_fmt(high)} ч "
+            f"при вилке 6.1 {b_low}{DASH}{b_high}"
+        )
+        if low == b_low and high == b_high:
+            warn(
+                f"{label} — совпадение по обеим границам: признак подгонки суммы "
+                f"под вилку, а не подтверждение оценок (решение 24)"
+            )
+        elif high < b_low or low > b_high:
+            warn(
+                f"{label} — сумма целиком вне вилки: сначала искать недостающее "
+                f"содержание, потом править вилку в blueprint (решение 24)"
+            )
+        else:
+            ok(label)
+
+    if reported == 0:
+        ok("часы по модулям: ни одного модуля с разобранными часами шагов")
 
 
 def check_skill_ids(blueprint_text: str) -> None:
@@ -206,7 +371,9 @@ def check_skill_ids(blueprint_text: str) -> None:
 
     # Считаются только ID из шапки "Умение: <ID>" каждого шага, а не всё
     # тело файла — иначе адреса ячеек Excel (A1, B2, C3...) неотличимы от
-    # ID умений и проверка покрытия перестаёт быть проверкой.
+    # ID умений и проверка покрытия перестаёт быть проверкой. Шаги с
+    # пометкой "Умение: — (инфраструктура)" сюда не попадают по построению
+    # регулярного выражения: они не закрывают ничего (решение 23).
     missing = [i for i in all_ids if i not in header_ids]
     if missing:
         fail(f"умения без шапки 'Умение: <ID>' ни в одном шаге program/**/*.md: {', '.join(missing)}")
@@ -783,7 +950,9 @@ def main() -> int:
     claude_text = CLAUDE_MD.read_text(encoding="utf-8")
 
     check_hours(blueprint_text, claude_text)
+    check_module_hours(blueprint_text)
     check_skill_ids(blueprint_text)
+    check_step_skill_header()
     check_decision_numbering()
     check_deferred_paths()
     check_step00(blueprint_text)
