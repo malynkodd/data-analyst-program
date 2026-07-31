@@ -6,3 +6,8 @@
 *.db
 __pycache__/
 *.pyc
+
+# Сгенерированный датасет M4: в репозитории — генератор и контрольная
+# точка, а не данные (решение 22 `design/decisions.md`, «Что коммитится»).
+program/M4/data/csv/
+program/M4/data/csv_next/
