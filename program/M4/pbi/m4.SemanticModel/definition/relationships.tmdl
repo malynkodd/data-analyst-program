@@ -1,0 +1,19 @@
+relationship 842e5041-c21c-481d-99f3-985e6df0fd6d
+	joinOnDateBehavior: datePartOnly
+	fromColumn: transactions.tx_date
+	toColumn: LocalDateTable_5b20ce05-b1bf-4a77-bc8c-7f961ec3ce49.Date
+
+relationship 6d1a944e-df8a-4f39-905a-bb9843e56889
+	joinOnDateBehavior: datePartOnly
+	fromColumn: transactions.settled_date
+	toColumn: LocalDateTable_2f7a081d-b37a-42c7-b28b-adb886f072f7.Date
+
+relationship AutoDetected_97997382-8214-4816-8bab-4fa5b610b188
+	fromColumn: transactions.merchant_id
+	toColumn: merchants.merchant_id
+
+relationship 29036238-b5c4-4cae-8110-b9686bcb0a15
+	joinOnDateBehavior: datePartOnly
+	fromColumn: calendar.date_key
+	toColumn: LocalDateTable_9357b11a-ed5b-4bba-8be2-353803f0f10c.Date
+

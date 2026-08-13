@@ -1,0 +1,38 @@
+table mcc_categories
+	lineageTag: 3405436b-cb07-4d49-ac88-62ea9493cde2
+
+	column code
+		dataType: int64
+		formatString: 0
+		lineageTag: b867dd70-9a8f-4b38-b6fb-26c26798c753
+		summarizeBy: sum
+		sourceColumn: code
+
+		annotation SummarizationSetBy = Automatic
+
+	column category_name
+		dataType: string
+		lineageTag: d1e33e88-22c1-4549-8b04-624812fafd3f
+		summarizeBy: none
+		sourceColumn: category_name
+
+		annotation SummarizationSetBy = Automatic
+
+	partition mcc_categories = m
+		mode: import
+		source =
+				let
+				    Источник = Csv.Document(
+				        File.Contents("D:\data-analyst-program\program\M4\data\csv\mcc_categories.csv"),
+				        [Delimiter = ",", Columns = 2, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    #"Повышенные заголовки" = Table.PromoteHeaders(Источник, [PromoteAllScalars = true]),
+				    #"Изменённый тип" = Table.TransformColumnTypes(#"Повышенные заголовки", {
+				        {"code", Int64.Type},
+				        {"category_name", type text}}, "en-US")
+				in
+				    #"Изменённый тип"
+
+	annotation PBI_NavigationStepName = Навигация
+
+	annotation PBI_ResultType = Table
+

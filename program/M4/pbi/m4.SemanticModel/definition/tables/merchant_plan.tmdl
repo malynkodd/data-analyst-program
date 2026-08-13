@@ -1,0 +1,58 @@
+table merchant_plan
+	lineageTag: 4ce430ca-92e7-411f-8f52-51ec6590d66c
+
+	column merchant_ref
+		dataType: int64
+		formatString: 0
+		lineageTag: 00c55992-887e-4dfc-9f64-d4032467e971
+		summarizeBy: sum
+		sourceColumn: merchant_ref
+
+		annotation SummarizationSetBy = Automatic
+
+	column period_ym
+		dataType: string
+		lineageTag: 4f3ba36e-878c-465b-a408-a117ee3fa3cf
+		summarizeBy: none
+		sourceColumn: period_ym
+
+		annotation SummarizationSetBy = Automatic
+
+	column plan_code
+		dataType: string
+		lineageTag: 609f031d-f1e5-4305-bc74-0a4301d89e54
+		summarizeBy: none
+		sourceColumn: plan_code
+
+		annotation SummarizationSetBy = Automatic
+
+	column commission_pct
+		dataType: double
+		lineageTag: 4036ab48-5620-45c7-9c95-b6172aba6c12
+		summarizeBy: sum
+		sourceColumn: commission_pct
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition merchant_plan = m
+		mode: import
+		source =
+				let
+				    Источник = Csv.Document(
+				        File.Contents("D:\data-analyst-program\program\M4\data\csv\merchant_plan.csv"),
+				        [Delimiter = ",", Columns = 4, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    #"Повышенные заголовки" = Table.PromoteHeaders(Источник, [PromoteAllScalars = true]),
+				    #"Изменённый тип" = Table.TransformColumnTypes(#"Повышенные заголовки", {
+				        {"merchant_ref", Int64.Type},
+				        {"period_ym", type text},
+				        {"plan_code", type text},
+				        {"commission_pct", type number}}, "en-US")
+				in
+				    #"Изменённый тип"
+
+	annotation PBI_NavigationStepName = Навигация
+
+	annotation PBI_ResultType = Table
+

@@ -1,0 +1,27 @@
+model Model
+	culture: ru-RU
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: ru-RU
+	valueFilterBehavior: independent
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_QueryOrder = ["transactions","merchants","merchant_plan","mcc_categories","calendar"]
+
+annotation PBI_ProTooling = ["DevMode"]
+
+ref table transactions
+ref table DateTableTemplate_86f19579-70ff-49a6-8881-5beb50aeace3
+ref table LocalDateTable_5b20ce05-b1bf-4a77-bc8c-7f961ec3ce49
+ref table LocalDateTable_2f7a081d-b37a-42c7-b28b-adb886f072f7
+ref table merchants
+ref table merchant_plan
+ref table mcc_categories
+ref table calendar
+ref table LocalDateTable_9357b11a-ed5b-4bba-8be2-353803f0f10c
+
+ref cultureInfo ru-RU
+

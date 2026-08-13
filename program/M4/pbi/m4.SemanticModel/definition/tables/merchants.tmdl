@@ -1,0 +1,56 @@
+table merchants
+	lineageTag: 301e3879-c8ee-4e64-911d-3fc3061a4ff9
+
+	column merchant_id
+		dataType: int64
+		formatString: 0
+		lineageTag: 7df860d8-3467-4bd5-9637-04658cd88540
+		summarizeBy: none
+		sourceColumn: merchant_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column merchant_name
+		dataType: string
+		lineageTag: b579ef1c-8f48-420d-a816-6ed1197038c2
+		summarizeBy: none
+		sourceColumn: merchant_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column city
+		dataType: string
+		lineageTag: 91215d72-89fe-4e2b-825e-c7d4cbb79107
+		summarizeBy: none
+		sourceColumn: city
+
+		annotation SummarizationSetBy = Automatic
+
+	column address
+		dataType: string
+		lineageTag: 96722653-b93d-483e-ac4f-1e848860952d
+		summarizeBy: none
+		sourceColumn: address
+
+		annotation SummarizationSetBy = Automatic
+
+	partition merchants = m
+		mode: import
+		source =
+				let
+				    Источник = Csv.Document(
+				        File.Contents("D:\data-analyst-program\program\M4\data\csv\merchants.csv"),
+				        [Delimiter = ",", Columns = 4, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    #"Повышенные заголовки" = Table.PromoteHeaders(Источник, [PromoteAllScalars = true]),
+				    #"Изменённый тип" = Table.TransformColumnTypes(#"Повышенные заголовки", {
+				        {"merchant_id", Int64.Type},
+				        {"merchant_name", type text},
+				        {"city", type text},
+				        {"address", type text}}, "en-US")
+				in
+				    #"Изменённый тип"
+
+	annotation PBI_NavigationStepName = Навигация
+
+	annotation PBI_ResultType = Table
+

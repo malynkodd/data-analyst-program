@@ -1,0 +1,111 @@
+table transactions
+	lineageTag: 4db54769-fbc1-4c0e-9823-5b0410b55f68
+
+	column tx_id
+		dataType: int64
+		formatString: 0
+		lineageTag: 7d0e8cb5-2336-44f4-a7e0-2d97cf230540
+		summarizeBy: sum
+		sourceColumn: tx_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column merchant_id
+		dataType: int64
+		formatString: 0
+		lineageTag: 06b042ab-52cb-440a-a7f0-9a23f79dc526
+		summarizeBy: none
+		sourceColumn: merchant_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column tx_date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 83757608-cdde-449c-94a9-71a9a9ef0660
+		summarizeBy: none
+		sourceColumn: tx_date
+
+		variation Изменение
+			isDefault
+			relationship: 842e5041-c21c-481d-99f3-985e6df0fd6d
+			defaultHierarchy: LocalDateTable_5b20ce05-b1bf-4a77-bc8c-7f961ec3ce49.'Иерархия дат'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column settled_date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: c94b602f-f6ab-44b5-9638-7f152c1bd4c7
+		summarizeBy: none
+		sourceColumn: settled_date
+
+		variation Изменение
+			isDefault
+			relationship: 6d1a944e-df8a-4f39-905a-bb9843e56889
+			defaultHierarchy: LocalDateTable_2f7a081d-b37a-42c7-b28b-adb886f072f7.'Иерархия дат'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column mcc
+		dataType: int64
+		formatString: 0
+		lineageTag: 128b27e4-b09d-414d-b614-15f51ef43d54
+		summarizeBy: sum
+		sourceColumn: mcc
+
+		annotation SummarizationSetBy = Automatic
+
+	column status
+		dataType: string
+		lineageTag: 3d701bf4-2fdd-407d-bcc1-f974a5b6507c
+		summarizeBy: none
+		sourceColumn: status
+
+		annotation SummarizationSetBy = Automatic
+
+	column amount_uah
+		dataType: double
+		formatString: 0.00
+		lineageTag: b2a28673-b21a-431d-9092-182a094f3b01
+		summarizeBy: sum
+		sourceColumn: amount_uah
+
+		annotation SummarizationSetBy = Automatic
+
+	column period_ym
+		dataType: string
+		lineageTag: c5b55f0f-ac09-450a-8b5b-f6af4283e074
+		summarizeBy: none
+		sourceColumn: period_ym
+
+		annotation SummarizationSetBy = Automatic
+
+	partition transactions = m
+		mode: import
+		source =
+				let
+				    Источник = Csv.Document(
+				        File.Contents("D:\data-analyst-program\program\M4\data\csv\transactions.csv"),
+				        [Delimiter = ",", Columns = 8, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    #"Повышенные заголовки" = Table.PromoteHeaders(Источник, [PromoteAllScalars = true]),
+				    #"Изменённый тип" = Table.TransformColumnTypes(#"Повышенные заголовки", {
+				        {"tx_id", Int64.Type},
+				        {"merchant_id", Int64.Type},
+				        {"tx_date", type date},
+				        {"settled_date", type date},
+				        {"mcc", Int64.Type},
+				        {"status", type text},
+				        {"amount_uah", type number},
+				        {"period_ym", type text}}, "en-US")
+				in
+				    #"Изменённый тип"
+
+	annotation PBI_NavigationStepName = Навигация
+
+	annotation PBI_ResultType = Table
+
