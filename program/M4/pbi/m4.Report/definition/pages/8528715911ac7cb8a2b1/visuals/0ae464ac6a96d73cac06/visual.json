@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "c92a70a723c01f9a673d",
+  "name": "0ae464ac6a96d73cac06",
   "position": {
-    "x": 112,
-    "y": 0,
-    "z": 8008,
+    "x": 0,
+    "y": 110,
+    "z": 8011,
     "height": 300,
-    "width": 560,
-    "tabOrder": 8008
+    "width": 661.25,
+    "tabOrder": 8011
   },
   "visual": {
     "visualType": "tableEx",
@@ -17,17 +17,17 @@
           "projections": [
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "mcc_categories"
+                      "Entity": "transactions"
                     }
                   },
-                  "Property": "category_name"
+                  "Property": "Commission"
                 }
               },
-              "queryRef": "mcc_categories.category_name",
-              "nativeQueryRef": "category_name"
+              "queryRef": "transactions.Commission",
+              "nativeQueryRef": "Commission"
             },
             {
               "field": {
@@ -37,11 +37,11 @@
                       "Entity": "transactions"
                     }
                   },
-                  "Property": "Total Amount"
+                  "Property": "Decline Rate"
                 }
               },
-              "queryRef": "transactions.Total Amount",
-              "nativeQueryRef": "Total Amount"
+              "queryRef": "transactions.Decline Rate",
+              "nativeQueryRef": "Decline Rate"
             },
             {
               "field": {
@@ -79,32 +79,52 @@
                       "Entity": "transactions"
                     }
                   },
-                  "Property": "Decline Rate"
+                  "Property": "Total Amount"
                 }
               },
-              "queryRef": "transactions.Decline Rate",
-              "nativeQueryRef": "Decline Rate"
+              "queryRef": "transactions.Total Amount",
+              "nativeQueryRef": "Total Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Settled YTD"
+                }
+              },
+              "queryRef": "transactions.Settled YTD",
+              "nativeQueryRef": "Settled YTD"
             }
           ]
         }
-      },
-      "sortDefinition": {
-        "sort": [
-          {
-            "field": {
-              "Measure": {
-                "Expression": {
-                  "SourceRef": {
-                    "Entity": "transactions"
-                  }
-                },
-                "Property": "Settled Amount"
-              }
-            },
-            "direction": "Descending"
-          }
-        ]
       }
+    },
+    "objects": {
+      "columnWidth": [
+        {
+          "properties": {
+            "value": {
+              "expr": {
+                "Literal": {
+                  "Value": "82.50000953673985D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "transactions.Settled YTD"
+          }
+        }
+      ],
+      "columnHeaders": [
+        {
+          "properties": {}
+        }
+      ]
     },
     "drillFilterOtherVisuals": true
   }
