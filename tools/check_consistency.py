@@ -22,6 +22,21 @@ BLUEPRINT = ROOT / "design" / "blueprint.md"
 CLAUDE_MD = ROOT / "CLAUDE.md"
 DECISIONS = ROOT / "design" / "decisions.md"
 PROGRAM_DIR = ROOT / "program"
+TOOLS_GATE = ROOT / "research" / "tools-gate.md"
+
+EM_DASH = "—"  # em dash: разделитель в заголовке дефекта и в статусе «не чинится»
+
+# Заголовок дефекта гейта: **R12 — ...** или **D1 — ...** с начала строки.
+DEFECT_HEADING = re.compile(r"^\*\*([RD]\d+) " + EM_DASH + r" ")
+
+# Три разрешённые формы учётной строки (решение 27, часть 2). Набор
+# закрытый намеренно: свободная формулировка ломает проверку опечаткой,
+# а спотыкающуюся проверку обходят первой же правкой.
+STATUS_FORMS = {
+    "открыт": re.compile(r"^Статус: открыт$"),
+    "закрыт": re.compile(r"^Статус: закрыт \d{4}-\d{2}-\d{2}, [0-9a-f]{7,40}, \S.*$"),
+    "не чинится": re.compile(r"^Статус: не чинится " + EM_DASH + r" \S.*$"),
+}
 
 DASH = "\u2013"  # en dash, используется в диапазонах часов по всему репозиторию
 
@@ -398,6 +413,102 @@ def check_step00(blueprint_text: str) -> None:
 
 
 DECISION_HEADING = re.compile(r"^## (\d+)\. ", re.MULTILINE)
+
+
+def check_defect_status() -> None:
+    """У каждого дефекта гейта в research/tools-gate.md ровно одна строка
+    статуса из трёх разрешённых форм (решение 27, часть 2).
+
+    Зачем закрытый набор значений: свободная формулировка означает, что
+    проверка спотыкается на опечатках, а спотыкающуюся проверку обходят
+    первой же правкой. Зачем вообще: без учёта закрытость 36 дефектов
+    гейта в аудите Фазы 4 недоказуема — отчёт о заходе не является
+    доказательством, он является утверждением.
+
+    Проверяется три вещи: заголовок дефекта не остался без статуса,
+    статус ровно один и написан по грамматике, нумерация R сплошная с 1.
+    Отрицательный пример к этой проверке прогнан при её заведении —
+    research/tools-gate.md, 5.5."""
+    if not TOOLS_GATE.exists():
+        fail("research/tools-gate.md не найден — учёт дефектов гейта проверить нечем")
+        return
+
+    lines = TOOLS_GATE.read_text(encoding="utf-8").split("\n")
+    blocks: list[tuple[str, int, int]] = []  # (id, начало, конец)
+    for i, line in enumerate(lines):
+        m = DEFECT_HEADING.match(line)
+        if m:
+            if blocks:
+                blocks[-1] = (blocks[-1][0], blocks[-1][1], i)
+            blocks.append((m.group(1), i, len(lines)))
+    if not blocks:
+        fail("research/tools-gate.md: не найдено ни одного заголовка дефекта '**R<NN> — '")
+        return
+
+    # блок дефекта кончается следующим дефектом или ближайшим заголовком
+    # раздела — иначе последний дефект секции 3.3 захватил бы разделы 3.4–3.7
+    bounded = []
+    for did, start, end in blocks:
+        stop = end
+        for j in range(start + 1, end):
+            if lines[j].startswith("#"):
+                stop = j
+                break
+        bounded.append((did, start, stop))
+
+    problems = False
+    counts = {"открыт": 0, "закрыт": 0, "не чинится": 0}
+    for did, start, stop in bounded:
+        found = [ln for ln in lines[start:stop] if ln.startswith("Статус:")]
+        if not found:
+            fail(f"research/tools-gate.md: дефект {did} без строки 'Статус:' (решение 27)")
+            problems = True
+            continue
+        if len(found) > 1:
+            fail(f"research/tools-gate.md: у дефекта {did} строк 'Статус:' {len(found)}, нужна ровно одна")
+            problems = True
+            continue
+        line = found[0]
+        for name, pattern in STATUS_FORMS.items():
+            if pattern.match(line):
+                counts[name] += 1
+                break
+        else:
+            fail(
+                f"research/tools-gate.md: дефект {did} — статус не по формату решения 27: {line!r}. "
+                f"Разрешено: 'Статус: открыт', "
+                f"'Статус: закрыт ГГГГ-ММ-ДД, <коммит>, <файл:раздел>', "
+                f"'Статус: не чинится {EM_DASH} <обоснование>'"
+            )
+            problems = True
+
+    stray = sum(1 for ln in lines if ln.startswith("Статус:")) - sum(
+        1 for did, start, stop in bounded for ln in lines[start:stop] if ln.startswith("Статус:")
+    )
+    if stray:
+        fail(
+            f"research/tools-gate.md: строк 'Статус:' вне блоков дефектов: {stray} — "
+            f"слово зарезервировано под учёт дефектов (решение 27)"
+        )
+        problems = True
+
+    r_numbers = sorted(int(d[1:]) for d, _, _ in bounded if d.startswith("R"))
+    expected = list(range(1, len(r_numbers) + 1))
+    if r_numbers != expected:
+        missing = sorted(set(expected) - set(r_numbers))
+        dupes = sorted({n for n in r_numbers if r_numbers.count(n) > 1})
+        fail(
+            f"research/tools-gate.md: нумерация дефектов R не сплошная — "
+            f"пропущены: {missing or 'нет'}, повторяются: {dupes or 'нет'}"
+        )
+        problems = True
+
+    if not problems:
+        ids = ", ".join(f"{n}: {c}" for n, c in counts.items())
+        ok(
+            f"research/tools-gate.md: {len(bounded)} дефектов со статусом "
+            f"(R1..R{max(r_numbers)} и D1) — {ids}"
+        )
 
 
 def check_decision_numbering() -> None:
@@ -954,6 +1065,7 @@ def main() -> int:
     check_skill_ids(blueprint_text)
     check_step_skill_header()
     check_decision_numbering()
+    check_defect_status()
     check_deferred_paths()
     check_step00(blueprint_text)
     check_data_readme_counts()
