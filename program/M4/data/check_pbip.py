@@ -379,6 +379,7 @@ def check_step04(project: Path, exports: Path) -> None:
                 bad(f"{v.parent.name}: визуал типа {token} — слой 3 решения 22 его запрещает")
         parsed.append((v, *visual_fields(v)))
 
+    found: dict[str, Path] = {}
     for label, (want_cols, want_measures) in REQUIRED_VISUALS.items():
         hit = None
         for path, cols, measures, _vt in parsed:
@@ -390,10 +391,31 @@ def check_step04(project: Path, exports: Path) -> None:
                 hit = path
                 break
         if hit is not None:
+            found[label] = hit
             ok(f"{label}: собран, поля на месте")
         else:
             need = ", ".join(sorted(want_cols | want_measures))
             bad(f"{label}: на странице нет визуала с полями {need}")
+
+    # Отдельная страница — единственное, что защищает выгрузку от
+    # перекрёстной фильтрации соседями: щелчок по строке визуала фильтрует
+    # только свою страницу. Дефект R35 сработал дважды за один прогон,
+    # оба раза выгрузка выглядела полной и была срезом.
+    if len(found) == len(REQUIRED_VISUALS):
+        pages = {p.parent.parent.parent for p in found.values()}
+        if len(pages) > 1:
+            bad(f"четыре визуала шага разложены по {len(pages)} страницам — "
+                f"им положена одна общая и отдельная")
+        else:
+            page = pages.pop()
+            neighbours = sorted(page.glob("visuals/*/visual.json"))
+            if len(neighbours) == len(REQUIRED_VISUALS):
+                ok(f"страница шага отдельная: на ней ровно {len(neighbours)} визуала шага "
+                   f"и ни одного чужого")
+            else:
+                bad(f"на странице шага {len(neighbours)} визуалов, а должно быть "
+                    f"{len(REQUIRED_VISUALS)}: соседи по странице перекрёстно фильтруют "
+                    f"выгрузку, и отфильтрованный файл не отличить от полного (R35)")
 
     if not exports.is_dir():
         bad(f"папки выгрузок {exports} нет — задания 5–6 не выполнены: "
