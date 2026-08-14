@@ -4,7 +4,7 @@
     {
       "ordinal": 0,
       "scrollPosition": {
-        "x": 0,
+        "x": 25.786895375233843,
         "y": 0
       },
       "nodes": [
@@ -75,7 +75,7 @@
         }
       ],
       "name": "Все таблицы",
-      "zoomValue": 100,
+      "zoomValue": 89.19259052056951,
       "pinKeyFieldsToTop": false,
       "showExtraHeaderInfo": false,
       "hideKeyFieldsWhenCollapsed": false,

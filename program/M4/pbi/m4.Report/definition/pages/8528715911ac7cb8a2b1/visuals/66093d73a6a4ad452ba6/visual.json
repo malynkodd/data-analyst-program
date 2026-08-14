@@ -1,20 +1,34 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "f0a883a804a6c317481b",
+  "name": "66093d73a6a4ad452ba6",
   "position": {
-    "x": 205.55555555555554,
-    "y": 258.88888888888886,
-    "z": 7,
+    "x": 824.44444444444446,
+    "y": 154.44444444444443,
+    "z": 10,
     "height": 280,
-    "width": 408.57142857142861,
-    "tabOrder": 7
+    "width": 271,
+    "tabOrder": 10
   },
   "visual": {
-    "visualType": "cardVisual",
+    "visualType": "tableEx",
     "query": {
       "queryState": {
-        "Data": {
+        "Values": {
           "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "merchant_plan"
+                    }
+                  },
+                  "Property": "plan_code"
+                }
+              },
+              "queryRef": "merchant_plan.plan_code",
+              "nativeQueryRef": "plan_code"
+            },
             {
               "field": {
                 "Aggregation": {
@@ -36,29 +50,6 @@
             }
           ]
         }
-      },
-      "sortDefinition": {
-        "sort": [
-          {
-            "field": {
-              "Aggregation": {
-                "Expression": {
-                  "Column": {
-                    "Expression": {
-                      "SourceRef": {
-                        "Entity": "transactions"
-                      }
-                    },
-                    "Property": "amount_uah"
-                  }
-                },
-                "Function": 0
-              }
-            },
-            "direction": "Descending"
-          }
-        ],
-        "isDefaultSort": true
       }
     },
     "drillFilterOtherVisuals": true

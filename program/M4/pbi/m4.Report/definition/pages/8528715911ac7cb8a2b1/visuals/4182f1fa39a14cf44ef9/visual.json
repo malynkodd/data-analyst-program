@@ -1,19 +1,19 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "169a38ebe002908782cb",
+  "name": "4182f1fa39a14cf44ef9",
   "position": {
-    "x": 270,
-    "y": 0,
-    "z": 4,
+    "x": 666.66666666666663,
+    "y": 27.777777777777779,
+    "z": 9,
     "height": 280,
-    "width": 280,
-    "tabOrder": 4
+    "width": 332.22222222222223,
+    "tabOrder": 9
   },
   "visual": {
-    "visualType": "cardVisual",
+    "visualType": "tableEx",
     "query": {
       "queryState": {
-        "Data": {
+        "Values": {
           "projections": [
             {
               "field": {
@@ -25,14 +25,28 @@
                           "Entity": "transactions"
                         }
                       },
-                      "Property": "tx_id"
+                      "Property": "amount_uah"
                     }
                   },
-                  "Function": 5
+                  "Function": 0
                 }
               },
-              "queryRef": "Sum(transactions.tx_id)",
-              "nativeQueryRef": "Количество tx_id"
+              "queryRef": "Sum(transactions.amount_uah)",
+              "nativeQueryRef": "Сумма amount_uah"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "mcc_categories"
+                    }
+                  },
+                  "Property": "category_name"
+                }
+              },
+              "queryRef": "mcc_categories.category_name",
+              "nativeQueryRef": "category_name"
             }
           ]
         }
@@ -49,16 +63,15 @@
                         "Entity": "transactions"
                       }
                     },
-                    "Property": "tx_id"
+                    "Property": "amount_uah"
                   }
                 },
-                "Function": 5
+                "Function": 0
               }
             },
             "direction": "Descending"
           }
-        ],
-        "isDefaultSort": true
+        ]
       }
     },
     "drillFilterOtherVisuals": true

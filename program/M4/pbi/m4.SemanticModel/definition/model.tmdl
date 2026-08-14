@@ -15,8 +15,6 @@ annotation PBI_ProTooling = ["DevMode"]
 
 ref table transactions
 ref table DateTableTemplate_86f19579-70ff-49a6-8881-5beb50aeace3
-ref table LocalDateTable_5b20ce05-b1bf-4a77-bc8c-7f961ec3ce49
-ref table LocalDateTable_2f7a081d-b37a-42c7-b28b-adb886f072f7
 ref table merchants
 ref table merchant_plan
 ref table mcc_categories

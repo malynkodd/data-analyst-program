@@ -26,11 +26,6 @@ table transactions
 		summarizeBy: none
 		sourceColumn: tx_date
 
-		variation Изменение
-			isDefault
-			relationship: 842e5041-c21c-481d-99f3-985e6df0fd6d
-			defaultHierarchy: LocalDateTable_5b20ce05-b1bf-4a77-bc8c-7f961ec3ce49.'Иерархия дат'
-
 		annotation SummarizationSetBy = Automatic
 
 		annotation UnderlyingDateTimeDataType = Date
@@ -42,11 +37,6 @@ table transactions
 		summarizeBy: none
 		sourceColumn: settled_date
 
-		variation Изменение
-			isDefault
-			relationship: 6d1a944e-df8a-4f39-905a-bb9843e56889
-			defaultHierarchy: LocalDateTable_2f7a081d-b37a-42c7-b28b-adb886f072f7.'Иерархия дат'
-
 		annotation SummarizationSetBy = Automatic
 
 		annotation UnderlyingDateTimeDataType = Date
@@ -55,7 +45,7 @@ table transactions
 		dataType: int64
 		formatString: 0
 		lineageTag: 128b27e4-b09d-414d-b614-15f51ef43d54
-		summarizeBy: sum
+		summarizeBy: none
 		sourceColumn: mcc
 
 		annotation SummarizationSetBy = Automatic
@@ -85,6 +75,14 @@ table transactions
 
 		annotation SummarizationSetBy = Automatic
 
+	column plan_key
+		dataType: string
+		lineageTag: 1425def3-00b4-4b4e-bfc2-ad5a942e7071
+		summarizeBy: none
+		sourceColumn: plan_key
+
+		annotation SummarizationSetBy = Automatic
+
 	partition transactions = m
 		mode: import
 		source =
@@ -101,9 +99,10 @@ table transactions
 				        {"mcc", Int64.Type},
 				        {"status", type text},
 				        {"amount_uah", type number},
-				        {"period_ym", type text}}, "en-US")
+				        {"period_ym", type text}}, "en-US"),
+				    #"Добавлен пользовательский объект" = Table.AddColumn(#"Изменённый тип", "plan_key", each Text.From([merchant_id]) & "|" & [period_ym])
 				in
-				    #"Изменённый тип"
+				    #"Добавлен пользовательский объект"
 
 	annotation PBI_NavigationStepName = Навигация
 
