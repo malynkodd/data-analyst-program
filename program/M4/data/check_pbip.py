@@ -33,11 +33,21 @@ BI Desktop. Первый настоящий прогон делает автор
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
+
+HERE = Path(__file__).resolve().parent
+
+# Сверка выгрузки с эталоном берётся из compare_csv.py, а не пишется
+# заново: у учащегося и у критерия шага обязано быть одно правило разбора
+# чисел, иначе «сошлось руками, не сошлось проверкой» становится штатной
+# ситуацией.
+sys.path.insert(0, str(HERE.parent.parent / "M3" / "data"))
+import compare_csv  # noqa: E402
 
 FAILED: list[str] = []
 
@@ -175,9 +185,58 @@ def check_step02(project: Path) -> None:
 
 DEFAULTS_MUST_BE_ABSENT = ("crossFilteringBehavior:", "fromCardinality:", "toCardinality:")
 
+# Таблицы, которые заводит настройка «Автоматические дата и время». Их не
+# видно ни в панели «Данные», ни на схеме, и учащийся их не создавал.
+AUTO_DATE_PREFIXES = ("LocalDateTable_", "DateTableTemplate_")
+
+# Пять связей шага — парами колонок, а не числом и не происхождением.
+# Так проверка не зависит ни от настройки автодаты (R12, R30), ни от того,
+# провёл ли учащийся связь руками или её предложило автоопределение
+# (R21, R22): предметом критерия является модель, а не история кликов.
+REQUIRED_LINKS = [
+    ("transactions.merchant_id", "merchants.merchant_id"),
+    ("transactions.mcc", "mcc_categories.code"),
+    ("transactions.tx_date", "calendar.date_key"),
+    ("transactions.settled_date", "calendar.date_key"),
+    ("transactions.plan_key", "merchant_plan.plan_key"),
+]
+INACTIVE_LINK = ("transactions.settled_date", "calendar.date_key")
+
+
+def parse_relationships(body: str) -> list[dict]:
+    """relationships.tmdl → список связей с колонками и активностью."""
+    blocks: list[dict] = []
+    current: dict | None = None
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("relationship "):
+            current = {"name": stripped[len("relationship "):].strip(),
+                       "from": "", "to": "", "active": True}
+            blocks.append(current)
+        elif current is None:
+            continue
+        elif stripped.startswith("fromColumn:"):
+            current["from"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("toColumn:"):
+            current["to"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("isActive:"):
+            current["active"] = stripped.split(":", 1)[1].strip() != "false"
+    return blocks
+
+
+def is_auto_date(link: dict) -> bool:
+    return any(side.startswith(AUTO_DATE_PREFIXES)
+               for side in (link["from"], link["to"]))
+
 
 def check_step03(project: Path) -> None:
-    """Связи. Проверка через отсутствие строки (решение 22, слой 2)."""
+    """Связи. Проверяются видимые учащемуся связи, поимённо по колонкам.
+
+    Скрытые связи автодаты печатаются справочной строкой и ни на один
+    порог не влияют: порог, зависящий от настройки, которую учащийся не
+    трогал, непроходим на настройках по умолчанию и проходим после
+    действия из следующего шага (дефекты R12, R29, R30 —
+    `research/tools-gate.md`, 3.3)."""
     sem = semantic_dir(project)
     path = sem / "relationships.tmdl" if sem else None
     if path is None or not path.exists():
@@ -185,38 +244,46 @@ def check_step03(project: Path) -> None:
         return
     body = read(path)
 
-    blocks = [b for b in body.split("relationship ") if b.strip()]
-    if len(blocks) == 5:
-        ok("связей в модели: 5")
-    else:
-        bad(f"связей в модели: {len(blocks)}, ожидалось 5")
+    links = parse_relationships(body)
+    hidden = [l for l in links if is_auto_date(l)]
+    visible = [l for l in links if not is_auto_date(l)]
 
-    auto = sum(1 for b in blocks if b.startswith("AutoDetected"))
-    if len(blocks) - auto >= 4:
-        ok(f"связей, созданных вручную: {len(blocks) - auto} (автоопределением: {auto})")
-    else:
-        bad(f"связей, созданных вручную: {len(blocks) - auto}, ожидалось не менее 4 — "
-            f"три случая ограничения C1 автоопределением не строятся")
+    if hidden:
+        print(f"       справочно: скрытых связей автодаты {len(hidden)} — "
+              f"на критерий не влияют, в панели «Данные» их не видно")
 
-    inactive = body.count("isActive: false")
-    if inactive == 1:
-        ok("ровно одна связь неактивна (вторая колонка-кандидат по дате)")
+    if len(visible) == 5:
+        ok("видимых связей в модели: 5")
     else:
-        bad(f"строк 'isActive: false' в файле: {inactive}, ожидалась ровно одна")
+        bad(f"видимых связей в модели: {len(visible)}, ожидалось 5")
 
-    present = [s for s in DEFAULTS_MUST_BE_ABSENT if s in body]
-    if present:
-        bad(f"в relationships.tmdl есть строки {', '.join(present)} — это отклонение от "
-            f"умолчаний: кардинальность не «многие к одному» либо фильтрация двусторонняя")
-    else:
-        ok("отклонений от умолчаний нет: кардинальность *:1, фильтрация односторонняя, "
-           "связи активны (кроме одной явно неактивной)")
-
-    for want in ("transactions.plan_key", "merchant_plan.plan_key"):
-        if want in body:
-            ok(f"составной ключ: связь использует {want}")
+    pairs = [(l["from"], l["to"]) for l in visible]
+    for want in REQUIRED_LINKS:
+        if want in pairs:
+            ok(f"связь на месте: {want[0]} → {want[1]}")
         else:
-            bad(f"составной ключ: в relationships.tmdl нет {want}")
+            bad(f"связи {want[0]} → {want[1]} в модели нет")
+
+    inactive = [l for l in visible if not l["active"]]
+    if len(inactive) != 1:
+        bad(f"неактивных видимых связей: {len(inactive)}, ожидалась ровно одна "
+            f"(вторая колонка-кандидат по дате)")
+    elif (inactive[0]["from"], inactive[0]["to"]) != INACTIVE_LINK:
+        bad(f"неактивна связь {inactive[0]['from']} → {inactive[0]['to']}, "
+            f"а должна быть {INACTIVE_LINK[0]} → {INACTIVE_LINK[1]}: "
+            f"активной обязана остаться связь по дате операции")
+    else:
+        ok("неактивна ровно одна связь, и это связь по дате расчёта")
+
+    deviating = [l for l in visible
+                 if any(s in body.split("relationship " + l["name"], 1)[-1].split("relationship ")[0]
+                        for s in DEFAULTS_MUST_BE_ABSENT)]
+    if deviating:
+        bad(f"у видимых связей есть отклонения от умолчаний "
+            f"({', '.join(l['name'] for l in deviating)}): кардинальность не «многие "
+            f"к одному» либо фильтрация двусторонняя")
+    else:
+        ok("отклонений от умолчаний нет: кардинальность *:1, фильтрация односторонняя")
 
 
 EXPECTED_MEASURES = {
@@ -229,8 +296,66 @@ EXPECTED_MEASURES = {
 }
 
 
-def check_step04(project: Path) -> None:
-    """Шесть мер DAX и три визуала."""
+# Визуалы шага — поимённо, по составу полей. Порог «визуалов не меньше
+# трёх» засчитывал визуалы предыдущего шага и печатал код 0 на модели, где
+# из восьми заданий сделаны два (дефект R32, `research/tools-gate.md`).
+# Существование файла — не выполнение задания.
+REQUIRED_VISUALS = {
+    "визуал 1 (категории)": (
+        {"mcc_categories.category_name"},
+        {"Total Amount", "Settled Amount", "Tx Count", "Decline Rate"},
+    ),
+    "визуал 2 (месяцы)": (
+        {"calendar.year", "calendar.month_no"},
+        {"Settled Amount", "Settled YTD"},
+    ),
+    "визуал 3 (тарифы)": (
+        {"merchant_plan.plan_code"},
+        {"Commission"},
+    ),
+    "визуал итогов": (
+        set(),
+        {"Total Amount", "Settled Amount", "Tx Count", "Decline Rate", "Commission", "Settled YTD"},
+    ),
+}
+
+# Экспорт — единственная опора критерия на число. Карточка округляет до
+# трёх значащих и переопределяет формат меры (R33), поэтому «сходится до
+# второго знака» проверяется файлом, а не экраном.
+EXPECTED_EXPORTS = {
+    "export_by_category.csv": "ref_by_category.csv",
+    "export_month_ytd.csv": "ref_month_ytd.csv",
+    "export_plan_commission.csv": "ref_plan_commission.csv",
+    "export_totals.csv": "ref_totals.csv",
+}
+
+
+def visual_fields(path: Path) -> tuple[set[str], set[str], str]:
+    """visual.json → (колонки как 'таблица.поле', имена мер, тип визуала)."""
+    try:
+        data = json.loads(read(path))
+    except json.JSONDecodeError:
+        return set(), set(), ""
+    visual = data.get("visual", {})
+    columns: set[str] = set()
+    measures: set[str] = set()
+    state = visual.get("query", {}).get("queryState", {})
+    for well in state.values():
+        for projection in well.get("projections", []):
+            field = projection.get("field", {})
+            for kind, bucket in (("Column", columns), ("Measure", measures)):
+                if kind not in field:
+                    continue
+                prop = field[kind].get("Property", "")
+                entity = field[kind].get("Expression", {}).get("SourceRef", {}).get("Entity", "")
+                # мера опознаётся по имени: учащийся вправе писать меры на
+                # любой таблице, и таблица-хозяин к критерию отношения не имеет
+                bucket.add(prop if kind == "Measure" else f"{entity}.{prop}")
+    return columns, measures, visual.get("visualType", "")
+
+
+def check_step04(project: Path, exports: Path) -> None:
+    """Шесть мер, четыре визуала поимённо и четыре сверки экспорта."""
     body = "\n".join(read(p) for p in table_files(project))
     for name, fragments in EXPECTED_MEASURES.items():
         marker = f"measure '{name}'" if " " in name else f"measure {name}"
@@ -246,24 +371,70 @@ def check_step04(project: Path) -> None:
 
     visuals = visual_files(project)
     banned = ("pieChart", "donutChart", "ribbonChart")
-    types: list[str] = []
+    parsed = []
     for v in visuals:
         text = read(v)
         for token in banned:
             if token in text:
                 bad(f"{v.parent.name}: визуал типа {token} — слой 3 решения 22 его запрещает")
-        types.append(v.parent.name)
-    if len(visuals) >= 3:
-        ok(f"визуалов на диске: {len(visuals)}")
-    else:
-        bad(f"визуалов на диске: {len(visuals)}, ожидалось не менее 3")
+        parsed.append((v, *visual_fields(v)))
 
-    sorted_ones = sum(1 for v in visuals if "sortDefinition" in read(v))
-    if sorted_ones >= 3:
-        ok(f"визуалов с объявленной сортировкой: {sorted_ones}")
-    else:
-        bad(f"визуалов с объявленной сортировкой: {sorted_ones}, ожидалось не менее 3 — "
-            f"порядок строк эталона проверяется по sortDefinition")
+    for label, (want_cols, want_measures) in REQUIRED_VISUALS.items():
+        hit = None
+        for path, cols, measures, _vt in parsed:
+            if want_cols <= cols and want_measures <= measures:
+                # визуал итогов не должен нести разрезов: иначе под него
+                # подойдёт любая из трёх таблиц с полным набором мер
+                if not want_cols and cols:
+                    continue
+                hit = path
+                break
+        if hit is not None:
+            ok(f"{label}: собран, поля на месте")
+        else:
+            need = ", ".join(sorted(want_cols | want_measures))
+            bad(f"{label}: на странице нет визуала с полями {need}")
+
+    if not exports.is_dir():
+        bad(f"папки выгрузок {exports} нет — задания 5–6 не выполнены: "
+            f"экспорт визуала и есть артефакт этого шага")
+        return
+
+    for name, ref_name in EXPECTED_EXPORTS.items():
+        got, want = exports / name, HERE / ref_name
+        if not got.exists():
+            bad(f"выгрузки {name} нет в {exports} — визуал не экспортирован")
+            continue
+        if not want.exists():
+            bad(f"эталона {ref_name} нет — соберите его: python reference_m4.py")
+            continue
+        problem = compare_export(got, want)
+        if problem:
+            bad(f"{name}: {problem}")
+        else:
+            ok(f"{name}: сходится с {ref_name}, расхождение 0")
+
+
+def compare_export(got: Path, want: Path) -> str:
+    """Сверка выгрузки с эталоном по правилам compare_csv.py.
+
+    Одна реализация на две точки входа: учащийся смотрит расхождение
+    подробным выводом `compare_csv.py`, критерий шага получает ту же
+    сверку одной строкой."""
+    mine, ref = compare_csv.read_csv(got), compare_csv.read_csv(want)
+    if not mine:
+        return "файл пуст"
+    if mine[0] != ref[0]:
+        return (f"заголовок не совпал: у вас {','.join(mine[0])}, "
+                f"эталон {','.join(ref[0])}")
+    if len(mine) - 1 != len(ref) - 1:
+        return f"строк {len(mine) - 1}, в эталоне {len(ref) - 1}"
+    for i, (got_row, want_row) in enumerate(zip(mine[1:], ref[1:]), start=1):
+        for j, (a, b) in enumerate(zip(got_row, want_row)):
+            if not compare_csv.same_value(a, b):
+                col = mine[0][j] if j < len(mine[0]) else f"колонка {j + 1}"
+                return f"строка {i}, колонка '{col}': у вас {a!r}, в эталоне {b!r}"
+    return ""
 
 
 CHECKS = {"01": check_step01, "02": check_step02, "03": check_step03, "04": check_step04}
@@ -274,6 +445,9 @@ def main() -> int:
     parser.add_argument("project", help="папка, в которую сохранён .pbip")
     parser.add_argument("--step", required=True, choices=sorted(CHECKS),
                         help="номер шага M4, чьи критерии проверяются")
+    parser.add_argument("--exports", default=None,
+                        help="папка с выгрузками визуалов (шаг 04); "
+                             "по умолчанию <папка проекта>\\export")
     args = parser.parse_args()
 
     project = Path(args.project)
@@ -281,8 +455,12 @@ def main() -> int:
         print(f"[FAIL] папка проекта {project} не найдена")
         return 1
 
+    exports = Path(args.exports) if args.exports else project / "export"
     print(f"Проект: {project.resolve()}  шаг: {args.step}\n")
-    CHECKS[args.step](project)
+    if args.step == "04":
+        check_step04(project, exports)
+    else:
+        CHECKS[args.step](project)
 
     print()
     if FAILED:

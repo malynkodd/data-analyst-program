@@ -141,12 +141,28 @@ def main() -> int:
     write_ref("ref_plan_commission.csv", ["plan_code", "Commission"],
               [[k, f"{v}"] for k, v in plan_rows])
 
-    # ---- числа, на которые ссылаются тексты шагов
-    print("\n--- Итоги по всему датасету ---")
+    # ---- визуал итогов: шесть мер одной строкой, без разрезов
+    # Заведён вместо проверки значений на карточках: карточка округляет до
+    # трёх значащих и переопределяет формат меры (`Tx Count` = 6582
+    # печатается как «7 тыс.»), поэтому критерий «сходится до второго
+    # знака» на экране не проверяется вовсе — дефект R33,
+    # `research/tools-gate.md`, 3.3. Опора критерия перенесена на файл.
     all_total = q(sum(total.values(), Decimal(0)), "0.01")
     all_settled = q(sum(settled.values(), Decimal(0)), "0.01")
     all_count = sum(count.values())
     all_declined = sum(declined.values())
+    all_rate = q(Decimal(all_declined) / Decimal(all_count), "0.0001")
+    last_year = months[-1][0]
+    settled_ytd = q(running[last_year], "0.01")
+    write_ref(
+        "ref_totals.csv",
+        ["Total Amount", "Settled Amount", "Tx Count", "Decline Rate", "Commission", "Settled YTD"],
+        [[f"{all_total}", f"{all_settled}", str(all_count), f"{all_rate}",
+          f"{q(commission_total, '0.01')}", f"{settled_ytd}"]],
+    )
+
+    # ---- числа, на которые ссылаются тексты шагов
+    print("\n--- Итоги по всему датасету ---")
     print(f"Total Amount   = {all_total}")
     print(f"Settled Amount = {all_settled}")
     print(f"Tx Count       = {all_count}")
@@ -181,6 +197,28 @@ def main() -> int:
     print(f"Комиссия по последнему тарифу: {wrong_q}")
     print(f"Комиссия по составному ключу:  {right_q}")
     print(f"Расхождение: {diff} ({q(abs(diff) / right_q * 100, '0.01')}%)")
+
+    # Вторая ошибка того же класса, но с другой арифметикой: плоская
+    # средняя ставка вместо помесячной. Считается отдельно, потому что
+    # число от подстановки «последний тариф» к ней не относится — на этом
+    # разошлись задание 8 и его критерий (дефект R36).
+    settled_by_plan = defaultdict(Decimal)
+    for r in tx:
+        if r["status"] == "settled":
+            settled_by_plan[plan_by_key[(r["merchant_id"], r["period_ym"])]["plan_code"]] += \
+                Decimal(r["amount_uah"])
+    eff_rate = commission_total / sum(settled_by_plan.values())
+    print("\n--- Плоская средняя ставка вместо помесячной ---")
+    print(f"Эффективная средняя ставка = Commission / Settled Amount = "
+          f"{q(eff_rate * 100, '0.0001')}%")
+    print(f"Итог при плоской ставке: {q(eff_rate * sum(settled_by_plan.values()), '0.01')} "
+          f"— расхождение с {right_q} равно 0.00 по построению")
+    print("Раскладка по тарифам ломается, хотя итог сходится:")
+    for code in sorted(commission, key=lambda k: -commission[k]):
+        flat = q(settled_by_plan[code] * eff_rate, "0.01")
+        right = q(commission[code], "0.01")
+        print(f"  {code:9s} правильно {right:>10} при плоской ставке {flat:>10} "
+              f"расхождение {right - flat:+}")
 
     # Вторая колонка-кандидат: дата расчёта против даты операции.
     crossing = sum(1 for r in tx if r["tx_date"][:7] != r["settled_date"][:7])

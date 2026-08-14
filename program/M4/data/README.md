@@ -27,6 +27,7 @@
 | `ref_by_category.csv` | Эталон визуала 1 (`step-04.md`): категория × `Total Amount`, `Settled Amount`, `Tx Count`, `Decline Rate`. | да |
 | `ref_month_ytd.csv` | Эталон визуала 2 (`step-04.md`): год, месяц × `Settled Amount`, `Settled YTD`. | да |
 | `ref_plan_commission.csv` | Эталон визуала 3 (`step-04.md`): тариф × `Commission`. | да |
+| `ref_totals.csv` | Эталон визуала итогов (`step-04.md`): шесть мер одной строкой, без разрезов. Заведён вместо сверки значений на карточках: карточка округляет до трёх значащих и переопределяет формат меры. | да |
 | `csv/` | Пять CSV базового периода: `transactions`, `merchants`, `mcc_categories`, `merchant_plan`, `calendar`. | **нет** — создаётся генератором |
 | `csv_next/` | Те же пять файлов, продлённые по 2026-07-31 (календарь — по 2026-08-07), плюс мерчант в новом городе. Для умения C2. | **нет** — создаётся генератором |
 
@@ -48,6 +49,7 @@
 | `ref_by_category.csv` | 6 |
 | `ref_month_ytd.csv` | 18 |
 | `ref_plan_commission.csv` | 3 |
+| `ref_totals.csv` | 1 |
 
 ## Порядок загрузки
 
