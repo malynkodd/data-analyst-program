@@ -14,12 +14,10 @@ annotation PBI_QueryOrder = ["transactions","merchants","merchant_plan","mcc_cat
 annotation PBI_ProTooling = ["DevMode"]
 
 ref table transactions
-ref table DateTableTemplate_86f19579-70ff-49a6-8881-5beb50aeace3
 ref table merchants
 ref table merchant_plan
 ref table mcc_categories
 ref table calendar
-ref table LocalDateTable_9357b11a-ed5b-4bba-8be2-353803f0f10c
 
 ref cultureInfo ru-RU
 

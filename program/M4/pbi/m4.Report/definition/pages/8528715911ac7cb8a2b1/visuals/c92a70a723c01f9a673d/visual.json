@@ -1,0 +1,111 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "c92a70a723c01f9a673d",
+  "position": {
+    "x": 100,
+    "y": 100,
+    "z": 8008,
+    "height": 300,
+    "width": 560,
+    "tabOrder": 8008
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "mcc_categories"
+                    }
+                  },
+                  "Property": "category_name"
+                }
+              },
+              "queryRef": "mcc_categories.category_name",
+              "nativeQueryRef": "category_name"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Total Amount"
+                }
+              },
+              "queryRef": "transactions.Total Amount",
+              "nativeQueryRef": "Total Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Settled Amount"
+                }
+              },
+              "queryRef": "transactions.Settled Amount",
+              "nativeQueryRef": "Settled Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Tx Count"
+                }
+              },
+              "queryRef": "transactions.Tx Count",
+              "nativeQueryRef": "Tx Count"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Decline Rate"
+                }
+              },
+              "queryRef": "transactions.Decline Rate",
+              "nativeQueryRef": "Decline Rate"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "transactions"
+                  }
+                },
+                "Property": "Settled Amount"
+              }
+            },
+            "direction": "Descending"
+          }
+        ]
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

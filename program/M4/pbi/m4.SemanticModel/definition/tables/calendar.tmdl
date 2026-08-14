@@ -1,17 +1,14 @@
 table calendar
 	lineageTag: 945e685a-a961-468d-a45c-f12f8f14ac3b
+	dataCategory: Time
 
 	column date_key
 		dataType: dateTime
+		isKey
 		formatString: Long Date
 		lineageTag: be49622f-5d0a-4246-84c4-ccfc86efdc1c
 		summarizeBy: none
 		sourceColumn: date_key
-
-		variation Изменение
-			isDefault
-			relationship: 29036238-b5c4-4cae-8110-b9686bcb0a15
-			defaultHierarchy: LocalDateTable_9357b11a-ed5b-4bba-8be2-353803f0f10c.'Иерархия дат'
 
 		annotation SummarizationSetBy = Automatic
 

@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "66093d73a6a4ad452ba6",
+  "name": "ccd71219440fcc301899",
   "position": {
-    "x": 950,
-    "y": 36.25,
-    "z": 7000,
-    "height": 155,
-    "width": 258.75,
-    "tabOrder": 7000
+    "x": 100,
+    "y": 100,
+    "z": 8010,
+    "height": 300,
+    "width": 300,
+    "tabOrder": 8010
   },
   "visual": {
     "visualType": "tableEx",
@@ -31,22 +31,17 @@
             },
             {
               "field": {
-                "Aggregation": {
+                "Measure": {
                   "Expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "transactions"
-                        }
-                      },
-                      "Property": "amount_uah"
+                    "SourceRef": {
+                      "Entity": "transactions"
                     }
                   },
-                  "Function": 0
+                  "Property": "Commission"
                 }
               },
-              "queryRef": "Sum(transactions.amount_uah)",
-              "nativeQueryRef": "Сумма amount_uah"
+              "queryRef": "transactions.Commission",
+              "nativeQueryRef": "Commission"
             }
           ]
         }

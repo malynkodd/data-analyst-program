@@ -2,11 +2,6 @@ relationship AutoDetected_97997382-8214-4816-8bab-4fa5b610b188
 	fromColumn: transactions.merchant_id
 	toColumn: merchants.merchant_id
 
-relationship 29036238-b5c4-4cae-8110-b9686bcb0a15
-	joinOnDateBehavior: datePartOnly
-	fromColumn: calendar.date_key
-	toColumn: LocalDateTable_9357b11a-ed5b-4bba-8be2-353803f0f10c.Date
-
 relationship aa2ba565-2f1b-6931-2a71-d88ccfd6f70d
 	fromColumn: transactions.mcc
 	toColumn: mcc_categories.code

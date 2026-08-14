@@ -1,6 +1,36 @@
 table transactions
 	lineageTag: 4db54769-fbc1-4c0e-9823-5b0410b55f68
 
+	measure 'Total Amount' = SUM(transactions[amount_uah])
+		formatString: 0.00
+		lineageTag: 23dbaa0c-eac1-4d6a-8a93-c021921a482b
+
+	measure 'Settled Amount' = CALCULATE([Total Amount], transactions[status] = "settled")
+		formatString: 0.00
+		lineageTag: ccbcc221-57aa-449c-a821-ece75df44e83
+
+	measure 'Tx Count' = COUNTROWS(transactions)
+		formatString: 0
+		lineageTag: 526b42a4-a1f2-4c64-85c8-8c0f182cd47f
+
+	measure 'Decline Rate' =
+			DIVIDE(
+			    CALCULATE(COUNTROWS(transactions), transactions[status] = "declined"),
+			    [Tx Count])
+		formatString: 0.0000
+		lineageTag: 72b91145-7f36-44cc-9ea3-95640373ed3a
+
+	measure Commission =
+			SUMX(
+			    FILTER(transactions, transactions[status] = "settled"),
+			    transactions[amount_uah] * RELATED(merchant_plan[commission_pct]))
+		formatString: 0.00
+		lineageTag: dab4d256-d950-442d-a43d-0845f51d28b1
+
+	measure 'Settled YTD' = TOTALYTD([Settled Amount], 'calendar'[date_key])
+		formatString: 0.00
+		lineageTag: 35396df9-93bf-4d8d-a60c-7c61190a43bb
+
 	column tx_id
 		dataType: int64
 		formatString: 0

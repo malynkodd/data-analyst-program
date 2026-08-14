@@ -1,0 +1,108 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "a9ef4cdb971c6ccc721a",
+  "position": {
+    "x": 100,
+    "y": 100,
+    "z": 8007,
+    "height": 300,
+    "width": 607.5,
+    "tabOrder": 8007
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Commission"
+                }
+              },
+              "queryRef": "transactions.Commission",
+              "nativeQueryRef": "Commission"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Decline Rate"
+                }
+              },
+              "queryRef": "transactions.Decline Rate",
+              "nativeQueryRef": "Decline Rate"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Settled Amount"
+                }
+              },
+              "queryRef": "transactions.Settled Amount",
+              "nativeQueryRef": "Settled Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Settled YTD"
+                }
+              },
+              "queryRef": "transactions.Settled YTD",
+              "nativeQueryRef": "Settled YTD"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Total Amount"
+                }
+              },
+              "queryRef": "transactions.Total Amount",
+              "nativeQueryRef": "Total Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Tx Count"
+                }
+              },
+              "queryRef": "transactions.Tx Count",
+              "nativeQueryRef": "Tx Count"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

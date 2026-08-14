@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "e37a76eee650217ee037",
+  "name": "374747ecc4bad37a832e",
   "position": {
-    "x": 628.75,
-    "y": 10,
-    "z": 8000,
-    "height": 206.25,
-    "width": 210,
-    "tabOrder": 8000
+    "x": 100,
+    "y": 100,
+    "z": 8009,
+    "height": 300,
+    "width": 577.5,
+    "tabOrder": 8009
   },
   "visual": {
     "visualType": "tableEx",
@@ -45,22 +45,31 @@
             },
             {
               "field": {
-                "Aggregation": {
+                "Measure": {
                   "Expression": {
-                    "Column": {
-                      "Expression": {
-                        "SourceRef": {
-                          "Entity": "transactions"
-                        }
-                      },
-                      "Property": "amount_uah"
+                    "SourceRef": {
+                      "Entity": "transactions"
                     }
                   },
-                  "Function": 0
+                  "Property": "Settled Amount"
                 }
               },
-              "queryRef": "Sum(transactions.amount_uah)",
-              "nativeQueryRef": "Сумма amount_uah"
+              "queryRef": "transactions.Settled Amount",
+              "nativeQueryRef": "Settled Amount"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Settled YTD"
+                }
+              },
+              "queryRef": "transactions.Settled YTD",
+              "nativeQueryRef": "Settled YTD"
             }
           ]
         }
