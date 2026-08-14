@@ -28,11 +28,11 @@
                       "Property": "tx_id"
                     }
                   },
-                  "Function": 0
+                  "Function": 5
                 }
               },
               "queryRef": "Sum(transactions.tx_id)",
-              "nativeQueryRef": "Сумма tx_id"
+              "nativeQueryRef": "Количество tx_id"
             }
           ]
         }
@@ -52,7 +52,7 @@
                     "Property": "tx_id"
                   }
                 },
-                "Function": 0
+                "Function": 5
               }
             },
             "direction": "Descending"
@@ -62,28 +62,5 @@
       }
     },
     "drillFilterOtherVisuals": true
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "3040ad835889105ac04e",
-        "field": {
-          "Aggregation": {
-            "Expression": {
-              "Column": {
-                "Expression": {
-                  "SourceRef": {
-                    "Entity": "transactions"
-                  }
-                },
-                "Property": "tx_id"
-              }
-            },
-            "Function": 0
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }

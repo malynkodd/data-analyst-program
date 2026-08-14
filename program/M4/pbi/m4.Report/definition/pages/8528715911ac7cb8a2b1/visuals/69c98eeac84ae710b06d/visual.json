@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "ce44ada61286a4eb0844",
+  "name": "69c98eeac84ae710b06d",
   "position": {
     "x": 0,
-    "y": 28,
-    "z": 2,
+    "y": 318,
+    "z": 5,
     "height": 280,
     "width": 280,
-    "tabOrder": 2
+    "tabOrder": 5
   },
   "visual": {
     "visualType": "cardVisual",
@@ -22,17 +22,17 @@
                     "Column": {
                       "Expression": {
                         "SourceRef": {
-                          "Entity": "mcc_categories"
+                          "Entity": "merchants"
                         }
                       },
-                      "Property": "code"
+                      "Property": "merchant_id"
                     }
                   },
                   "Function": 5
                 }
               },
-              "queryRef": "Sum(mcc_categories.code)",
-              "nativeQueryRef": "Количество code"
+              "queryRef": "CountNonNull(merchants.merchant_id)",
+              "nativeQueryRef": "merchant_id"
             }
           ]
         }
@@ -46,10 +46,10 @@
                   "Column": {
                     "Expression": {
                       "SourceRef": {
-                        "Entity": "mcc_categories"
+                        "Entity": "merchants"
                       }
                     },
-                    "Property": "code"
+                    "Property": "merchant_id"
                   }
                 },
                 "Function": 5

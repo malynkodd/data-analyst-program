@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "ce44ada61286a4eb0844",
+  "name": "22c99f6a7b4aaba00141",
   "position": {
-    "x": 0,
-    "y": 28,
-    "z": 2,
+    "x": 310,
+    "y": 318.57142857142861,
+    "z": 6,
     "height": 280,
-    "width": 280,
-    "tabOrder": 2
+    "width": 398.57142857142861,
+    "tabOrder": 6
   },
   "visual": {
     "visualType": "cardVisual",
@@ -22,17 +22,17 @@
                     "Column": {
                       "Expression": {
                         "SourceRef": {
-                          "Entity": "mcc_categories"
+                          "Entity": "calendar"
                         }
                       },
-                      "Property": "code"
+                      "Property": "date_key"
                     }
                   },
                   "Function": 5
                 }
               },
-              "queryRef": "Sum(mcc_categories.code)",
-              "nativeQueryRef": "Количество code"
+              "queryRef": "Min(calendar.date_key)",
+              "nativeQueryRef": "Количество date_key"
             }
           ]
         }
@@ -46,10 +46,10 @@
                   "Column": {
                     "Expression": {
                       "SourceRef": {
-                        "Entity": "mcc_categories"
+                        "Entity": "calendar"
                       }
                     },
-                    "Property": "code"
+                    "Property": "date_key"
                   }
                 },
                 "Function": 5

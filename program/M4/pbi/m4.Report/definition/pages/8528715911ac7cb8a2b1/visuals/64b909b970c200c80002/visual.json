@@ -28,11 +28,11 @@
                       "Property": "merchant_ref"
                     }
                   },
-                  "Function": 0
+                  "Function": 5
                 }
               },
               "queryRef": "Sum(merchant_plan.merchant_ref)",
-              "nativeQueryRef": "Сумма merchant_ref"
+              "nativeQueryRef": "Количество merchant_ref"
             }
           ]
         }
@@ -52,7 +52,7 @@
                     "Property": "merchant_ref"
                   }
                 },
-                "Function": 0
+                "Function": 5
               }
             },
             "direction": "Descending"
@@ -62,28 +62,5 @@
       }
     },
     "drillFilterOtherVisuals": true
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "198a6827dac0c4e09d23",
-        "field": {
-          "Aggregation": {
-            "Expression": {
-              "Column": {
-                "Expression": {
-                  "SourceRef": {
-                    "Entity": "merchant_plan"
-                  }
-                },
-                "Property": "merchant_ref"
-              }
-            },
-            "Function": 0
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }
