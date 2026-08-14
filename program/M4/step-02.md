@@ -206,7 +206,7 @@ in
 | `merchants` | 24 |
 | `mcc_categories` | 6 |
 | `merchant_plan` | 432 |
-| `calendar` | 546 |
+| `calendar` | 553 |
 
 Значение 26 у `merchants` вместо 24 — не «почти сошлось», а признак
 `QuoteStyle.None`: два адреса разорваны по переводу строки.

@@ -149,7 +149,7 @@ blueprint, — в самом проекте P3 (Prozorro API + API НБУ). Ре
 | `merchants` | 24 | `merchant_id`, `merchant_name`, `city`, `address` | Измерение: мерчант, город, адрес |
 | `mcc_categories` | 6 | `code`, `category_name` | Измерение: категория торговой точки по коду MCC |
 | `merchant_plan` | 432 | `merchant_ref`, `period_ym`, `plan_code`, `commission_pct` | Тариф мерчанта по месяцам: 24 мерчанта × 18 месяцев |
-| `calendar` | 546 | `date_key`, `year`, `month_no`, `month_uk` | Измерение дат для time-intelligence |
+| `calendar` | 553 | `date_key`, `year`, `month_no`, `month_uk` | Измерение дат для time-intelligence: 2025-01-01 … 2026-07-07, на неделю длиннее периода операций — дата расчёта переступает его границу |
 
 Контрольные суммы (посчитаны `reference_m4.py`, не на глаз):
 

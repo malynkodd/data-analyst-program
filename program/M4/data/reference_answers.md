@@ -27,7 +27,7 @@ $ python program\M4\data\generate_m4.py
 | `merchants.csv` | 24 | `50126c9341c2f5e68dae7300be29d59aa0a73176f4d746891dc87bae4d0d6f24` |
 | `mcc_categories.csv` | 6 | `9032c2cc5dc17a37bf2046bf2c0a553265b97976cadebf52a9a9361e43aef540` |
 | `merchant_plan.csv` | 432 | `d7f0554e1b461d0c58ad2b3d42f2d88da0c20fb8c1565daa5374c4e36010fd86` |
-| `calendar.csv` | 546 | `3bd6f1cba6b546be8b984886803bf090d0af7f2776c067d37155e7a4382c7670` |
+| `calendar.csv` | 553 | `550e22ebf09ea571021dfeb06f99f0297621e6561f96d6c5d48e6a8d4ba88e04` |
 | `transactions.csv` | 6582 | `67b2c3e115e994e02b1933c31e2bb140408d5c2488406edfdb28b70302d34345` |
 
 ### `csv_next/` — тот же набор по 2026-07-31 (для C2)
@@ -37,8 +37,19 @@ $ python program\M4\data\generate_m4.py
 | `merchants.csv` | 25 | `7b72ca4e1551e4a0130185e95ef58d3764662912e110ea05da8ac34b8da6dfc1` |
 | `mcc_categories.csv` | 6 | `9032c2cc5dc17a37bf2046bf2c0a553265b97976cadebf52a9a9361e43aef540` |
 | `merchant_plan.csv` | 457 | `209f6bb78fc618d05c7b01b6b3fddab4494580fbc0c041e64fe8a07a959d73c6` |
-| `calendar.csv` | 577 | `478d63d73a0127b3f58494501b865cea4dfb813261253b443a52324551757c26` |
+| `calendar.csv` | 584 | `614cc2c735dcdd60f89decdfb7d78a1a4e5061bd48cdd824c7c0b8f2b168b3e9` |
 | `transactions.csv` | 7316 | `beabc4b35c2583da1fc5d277772a9becd36b29a577e20bbac2087281610951c2` |
+
+**Календарь длиннее периода операций на неделю, и это не описка.**
+`tx_date` кончается 2026-06-30 в `csv/` и 2026-07-31 в `csv_next/`, а
+`settled_date` переступает эту границу: сдвиг +1…3 дня плюс перенос с
+выходных на понедельник даёт до +5 календарных дней. Поэтому календарь
+доведён до 2026-07-07 и 2026-08-07 соответственно — 553 и 584 дня.
+Обрезанный по границе операций календарь ронял 30 операций на 47482.23
+(и 50 на 41581.44 в `csv_next/`) в строку с пустым измерением при разрезе
+по дате расчёта — дефект D1, `research/tools-gate.md`, 3.8. Инвариант
+`max(settled_date) <= max(date_key)` проверяется и генератором, и
+`tools/check_consistency.py`.
 
 **Sha256 считается по всему файлу, а не по первым N строкам.** Объём
 датасета генератором не параметризуется: период задан константами
@@ -64,7 +75,7 @@ CSV-парсер.
 | `merchants` | 24 |
 | `mcc_categories` | 6 |
 | `merchant_plan` | 432 |
-| `calendar` | 546 |
+| `calendar` | 553 |
 
 Отдельно по `merchants`: в файле **27 физических строк** при 24 строках
 данных — у двух мерчантов адрес многострочный. Разбор, при котором в

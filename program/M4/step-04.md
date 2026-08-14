@@ -55,7 +55,7 @@ transactions[status] = "settled")` — сумма только по успешн
 говорит прямо: «You have to mark your date table if you use the Classic
 time intelligence functions in Power BI». При пометке Power BI проверяет
 колонку: уникальные значения, отсутствие пустых, непрерывный ряд дат.
-Календарь модуля этому удовлетворяет — 546 подряд идущих дней без
+Календарь модуля этому удовлетворяет — 553 подряд идущих дня без
 пропусков.
 
 Синтаксис — [TOTALYTD](https://learn.microsoft.com/en-us/dax/totalytd-function-dax):

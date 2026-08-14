@@ -52,6 +52,17 @@ BASE_START = date(2025, 1, 1)
 BASE_END = date(2026, 6, 30)
 NEXT_END = date(2026, 7, 31)
 
+# Хвост календаря за границей периода операций. Нужен потому, что
+# `settled_date` переступает границу: business_shift даёт +1..3 дня, плюс
+# перенос с выходных на понедельник — до +2, то есть максимум +5
+# календарных дней от `tx_date`. Календарь, обрезанный по BASE_END, этих
+# дней не содержит, и разрез по дате расчёта проваливает часть оборота в
+# строку с пустым измерением (дефект D1, `research/tools-gate.md`, 3.8:
+# 30 операций на 47482.23 в `csv/`, 50 на 41581.44 в `csv_next/`).
+# 7 = 5 по арифметике сдвига + 2 запаса; инвариант проверяется прогоном
+# ниже, а не доверием к этой цифре.
+CALENDAR_TAIL_DAYS = 7
+
 MONTHS_UK = [
     "січень", "лютий", "березень", "квітень", "травень", "червень",
     "липень", "серпень", "вересень", "жовтень", "листопад", "грудень",
@@ -250,7 +261,9 @@ def main() -> int:
     tx_old = build_transactions(MERCHANTS, BASE_START, NEXT_END)
     plans_new = build_plans([NEW_MERCHANT], periods_all[-1:])
     tx_new = build_transactions([NEW_MERCHANT], date(2026, 7, 1), NEXT_END)
-    calendar_all = build_calendar(BASE_START, NEXT_END)
+    tail = timedelta(days=CALENDAR_TAIL_DAYS)
+    calendar_all = build_calendar(BASE_START, NEXT_END + tail)
+    base_calendar_end = (BASE_END + tail).isoformat()
 
     base_periods = set(months_between(BASE_START, BASE_END))
     merchant_header = ["merchant_id", "merchant_name", "city", "address"]
@@ -265,7 +278,7 @@ def main() -> int:
             ("merchant_plan.csv", ["merchant_ref", "period_ym", "plan_code", "commission_pct"],
              [r for r in plans_old if r["period_ym"] in base_periods]),
             ("calendar.csv", ["date_key", "year", "month_no", "month_uk"],
-             [r for r in calendar_all if r["date_key"] <= BASE_END.isoformat()]),
+             [r for r in calendar_all if r["date_key"] <= base_calendar_end]),
             ("transactions.csv", TX_HEADER,
              [r for r in tx_old if r["tx_date"] <= BASE_END.isoformat()]),
         ],
@@ -281,6 +294,22 @@ def main() -> int:
             ("transactions.csv", TX_HEADER, tx_old + tx_new),
         ],
     }
+
+    # Инвариант D1: календарь обязан покрывать дату расчёта, иначе разрез
+    # по `settled_date` теряет операции в строке с пустым измерением.
+    # Проверяется до записи файлов и по обеим папкам — цифра
+    # CALENDAR_TAIL_DAYS доверия не заслуживает, пока не проверена.
+    for name, files in layout.items():
+        by_file = {fname: rows for fname, _hdr, rows in files}
+        max_settled = max(r["settled_date"] for r in by_file["transactions.csv"])
+        max_date_key = max(r["date_key"] for r in by_file["calendar.csv"])
+        if max_settled > max_date_key:
+            raise SystemExit(
+                f"{name}/: календарь кончается {max_date_key}, а максимальная "
+                f"settled_date {max_settled} — это дефект D1. Увеличьте "
+                f"CALENDAR_TAIL_DAYS, а не границу периода операций."
+            )
+        print(f"{name}/: max settled_date {max_settled} <= max date_key {max_date_key}")
 
     for name, files in layout.items():
         print(f"\n{name}/")

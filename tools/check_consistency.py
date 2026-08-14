@@ -415,6 +415,59 @@ def check_step00(blueprint_text: str) -> None:
 DECISION_HEADING = re.compile(r"^## (\d+)\. ", re.MULTILINE)
 
 
+def check_calendar_covers_settled() -> None:
+    """Календарь датасета обязан покрывать максимальную дату расчёта:
+    max(settled_date) <= max(date_key), по каждой папке данных.
+
+    Это дефект D1 (`research/tools-gate.md`, 3.8), найденный прогоном
+    гейта: календарь резался по границе периода операций, а `settled_date`
+    её переступает на 1–5 дней. Тридцать операций на 47482.23 (0.46%
+    оборота) проваливались в строку с пустым измерением на том самом
+    разрезе, который требует задание 5 `step-03.md`, — и проваливались
+    тихо: итог сходился.
+
+    Проверка написана поперёк папок и колонок, а не под M4: любая пара
+    «календарь + факт с датой» в program/*/data/ попадает под неё. Папки
+    в .gitignore (решение 22: в репозитории генератор, а не данные),
+    поэтому отсутствие папки — не ошибка, а «нечего проверять»: датасет
+    собирается запуском генератора."""
+    if not PROGRAM_DIR.exists():
+        return
+
+    checked = 0
+    problems = False
+    for cal_path in sorted(PROGRAM_DIR.glob("M*/data/*/calendar.csv")):
+        tx_path = cal_path.parent / "transactions.csv"
+        if not tx_path.exists():
+            continue
+        try:
+            with cal_path.open(encoding="utf-8", newline="") as f:
+                max_key = max(r["date_key"] for r in csv.DictReader(f))
+            with tx_path.open(encoding="utf-8", newline="") as f:
+                rows = list(csv.DictReader(f))
+            max_settled = max(r["settled_date"] for r in rows)
+            outside = [r for r in rows if r["settled_date"] > max_key]
+        except (KeyError, ValueError) as exc:
+            fail(f"{cal_path.parent.relative_to(ROOT)}: не удалось проверить покрытие календаря: {exc}")
+            problems = True
+            continue
+
+        checked += 1
+        if outside:
+            lost = sum(float(r["amount_uah"]) for r in outside)
+            fail(
+                f"{cal_path.parent.relative_to(ROOT)}: календарь кончается {max_key}, "
+                f"а max(settled_date) = {max_settled} — {len(outside)} операций на {lost:.2f} "
+                f"уйдут в строку с пустым измерением (дефект D1)"
+            )
+            problems = True
+
+    if checked and not problems:
+        ok(f"program/M*/data/: календарь покрывает дату расчёта, сверено папок: {checked}")
+    elif not checked:
+        ok("program/M*/data/: папок с calendar.csv и transactions.csv нет — датасет не собран, проверка пропущена")
+
+
 def check_defect_status() -> None:
     """У каждого дефекта гейта в research/tools-gate.md ровно одна строка
     статуса из трёх разрешённых форм (решение 27, часть 2).
@@ -1066,6 +1119,7 @@ def main() -> int:
     check_step_skill_header()
     check_decision_numbering()
     check_defect_status()
+    check_calendar_covers_settled()
     check_deferred_paths()
     check_step00(blueprint_text)
     check_data_readme_counts()
