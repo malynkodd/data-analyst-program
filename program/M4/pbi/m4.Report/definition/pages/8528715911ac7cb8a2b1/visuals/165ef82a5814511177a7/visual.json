@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
-  "name": "0ae464ac6a96d73cac06",
+  "name": "165ef82a5814511177a7",
   "position": {
-    "x": 0,
-    "y": 314.28571428571428,
-    "z": 8011,
-    "height": 95.714285714285722,
-    "width": 542.85714285714289,
-    "tabOrder": 8011
+    "x": 387.14285714285717,
+    "y": 570,
+    "z": 8012,
+    "height": 150,
+    "width": 437.14285714285717,
+    "tabOrder": 8012
   },
   "visual": {
     "visualType": "tableEx",
@@ -23,25 +23,11 @@
                       "Entity": "transactions"
                     }
                   },
-                  "Property": "Commission"
+                  "Property": "Total Amount"
                 }
               },
-              "queryRef": "transactions.Commission",
-              "nativeQueryRef": "Commission"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "transactions"
-                    }
-                  },
-                  "Property": "Decline Rate"
-                }
-              },
-              "queryRef": "transactions.Decline Rate",
-              "nativeQueryRef": "Decline Rate"
+              "queryRef": "transactions.Total Amount",
+              "nativeQueryRef": "Total Amount"
             },
             {
               "field": {
@@ -79,11 +65,25 @@
                       "Entity": "transactions"
                     }
                   },
-                  "Property": "Total Amount"
+                  "Property": "Decline Rate"
                 }
               },
-              "queryRef": "transactions.Total Amount",
-              "nativeQueryRef": "Total Amount"
+              "queryRef": "transactions.Decline Rate",
+              "nativeQueryRef": "Decline Rate"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "transactions"
+                    }
+                  },
+                  "Property": "Commission"
+                }
+              },
+              "queryRef": "transactions.Commission",
+              "nativeQueryRef": "Commission"
             },
             {
               "field": {
@@ -102,29 +102,6 @@
           ]
         }
       }
-    },
-    "objects": {
-      "columnWidth": [
-        {
-          "properties": {
-            "value": {
-              "expr": {
-                "Literal": {
-                  "Value": "82.50000953673985D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "transactions.Settled YTD"
-          }
-        }
-      ],
-      "columnHeaders": [
-        {
-          "properties": {}
-        }
-      ]
     },
     "drillFilterOtherVisuals": true
   }

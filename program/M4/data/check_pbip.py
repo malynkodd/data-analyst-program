@@ -87,6 +87,33 @@ def visual_files(project: Path) -> list[Path]:
     return sorted(rep.glob("definition/pages/*/visuals/*/visual.json")) if rep else []
 
 
+def check_gitignore(project: Path) -> None:
+    """Покрыт ли локальный мусор проекта — своим `.gitignore` или любым
+    родительским. Дефект R4: Power BI Desktop кладёт свой `.gitignore` в
+    новую папку вне репозитория, но в папку внутри репозитория не положил
+    ни разу из двух проб. Требовать файл именно в проекте — значит
+    требовать того, чего инструмент не делает."""
+    wanted = ("localSettings.json", "cache.abf")
+    here = project.resolve()
+    seen = []
+    for folder_up in [here, *here.parents]:
+        candidate = folder_up / ".gitignore"
+        if not candidate.exists():
+            continue
+        seen.append(candidate)
+        body = read(candidate)
+        if ".pbi/" in body or all(s in body for s in wanted):
+            where = "проекта" if folder_up == here else str(candidate)
+            ok(f".pbi/ выведен из-под версионирования: .gitignore {where}")
+            return
+    if seen:
+        bad(f"ни один из {len(seen)} найденных .gitignore не покрывает `.pbi/`: "
+            f"нужна строка `**/.pbi/` либо обе — {', '.join(wanted)}")
+    else:
+        bad("ни одного .gitignore над проектом не найдено; Power BI Desktop свой "
+            "кладёт не всегда (R4) — строка `**/.pbi/` пишется в корень репозитория")
+
+
 def check_step01(project: Path) -> None:
     """Три preview-функции включены — доказывается файлами на диске."""
     pbip = sorted(project.glob("*.pbip"))
@@ -127,16 +154,7 @@ def check_step01(project: Path) -> None:
         bad("PBIR: не найдено ни одного visual.json — на странице нет визуалов "
             "или PBIR выключен")
 
-    gitignore = project / ".gitignore"
-    if gitignore.exists():
-        body = read(gitignore)
-        missing = [s for s in ("localSettings.json", "cache.abf") if s not in body]
-        if missing:
-            bad(f".gitignore проекта не покрывает: {', '.join(missing)}")
-        else:
-            ok(".gitignore проекта выводит из-под версионирования localSettings.json и cache.abf")
-    else:
-        bad(".gitignore в папке проекта не найден — его создаёт сам Power BI Desktop")
+    check_gitignore(project)
 
     if tables:
         ok(f"таблиц в модели: {len(tables)}")
@@ -397,25 +415,10 @@ def check_step04(project: Path, exports: Path) -> None:
             need = ", ".join(sorted(want_cols | want_measures))
             bad(f"{label}: на странице нет визуала с полями {need}")
 
-    # Отдельная страница — единственное, что защищает выгрузку от
-    # перекрёстной фильтрации соседями: щелчок по строке визуала фильтрует
-    # только свою страницу. Дефект R35 сработал дважды за один прогон,
-    # оба раза выгрузка выглядела полной и была срезом.
-    if len(found) == len(REQUIRED_VISUALS):
-        pages = {p.parent.parent.parent for p in found.values()}
-        if len(pages) > 1:
-            bad(f"четыре визуала шага разложены по {len(pages)} страницам — "
-                f"им положена одна общая и отдельная")
-        else:
-            page = pages.pop()
-            neighbours = sorted(page.glob("visuals/*/visual.json"))
-            if len(neighbours) == len(REQUIRED_VISUALS):
-                ok(f"страница шага отдельная: на ней ровно {len(neighbours)} визуала шага "
-                   f"и ни одного чужого")
-            else:
-                bad(f"на странице шага {len(neighbours)} визуалов, а должно быть "
-                    f"{len(REQUIRED_VISUALS)}: соседи по странице перекрёстно фильтруют "
-                    f"выгрузку, и отфильтрованный файл не отличить от полного (R35)")
+    # Раскладку визуалов по страницам скрипт не проверяет намеренно (R35,
+    # статус «не чинится»): перекрёстную фильтрацию ловит сверка четырёх
+    # выгрузок с эталонами — отфильтрованный визуал даёт [FAIL] на числах.
+    # Отдельная страница остаётся требованием текста, задание 3.
 
     if not exports.is_dir():
         bad(f"папки выгрузок {exports} нет — задания 5–6 не выполнены: "

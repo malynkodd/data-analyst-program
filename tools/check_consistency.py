@@ -23,6 +23,7 @@ CLAUDE_MD = ROOT / "CLAUDE.md"
 DECISIONS = ROOT / "design" / "decisions.md"
 PROGRAM_DIR = ROOT / "program"
 TOOLS_GATE = ROOT / "research" / "tools-gate.md"
+UI_LABELS = ROOT / "research" / "pbi-ui-labels.md"
 
 EM_DASH = "—"  # em dash: разделитель в заголовке дефекта и в статусе «не чинится»
 
@@ -1061,6 +1062,78 @@ CODE_FENCE = re.compile(r"```.*?\n(.*?)```", re.DOTALL)
 INLINE_CODE = re.compile(r"`[^`]*`", re.DOTALL)
 
 
+def _registry_rows(heading: str) -> list[list[str]]:
+    """Строки таблицы из раздела реестра надписей: ячейки без обрамления."""
+    text = UI_LABELS.read_text(encoding="utf-8")
+    start = text.index(heading) + len(heading)
+    end = text.find("\n## ", start)
+    body = text[start:] if end < 0 else text[start:end]
+    rows = []
+    for line in body.split("\n"):
+        line = line.strip()
+        if not line.startswith("|") or set(line) <= set("|- "):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if cells and cells[0].lower().startswith("запрещено"):
+            continue
+        if cells and cells[0].startswith("Надпись"):
+            continue
+        rows.append(cells)
+    return rows
+
+
+def check_ui_labels() -> None:
+    """Надписи интерфейса, измеренные как неверные, не должны возвращаться
+    в шаги. Гейт дал шесть дефектов одного класса (R2, R9, R10, R16, R18,
+    R28, R31): текст называет вкладку по смыслу действия, а не по надписи
+    на ленте. Правка шести мест ничего не гарантирует — гарантирует
+    реестр `research/pbi-ui-labels.md` плюс эта проверка.
+
+    Поиск идёт по сырому тексту с \\s+ между словами надписи: перенос
+    строки посреди «Инструменты для\\nмер» её не прячет."""
+    if not UI_LABELS.exists():
+        fail(f"нет реестра надписей {UI_LABELS.relative_to(ROOT)} — проверка шагов невозможна")
+        return
+
+    banned = []
+    for cells in _registry_rows("## 2. Запрещённые формы"):
+        if len(cells) < 3:
+            continue
+        label = cells[0].strip("`")
+        if label:
+            banned.append((label, cells[1].strip("`"), cells[2]))
+
+    if not banned:
+        fail(f"{UI_LABELS.relative_to(ROOT)}: раздел 2 пуст — читать нечего")
+        return
+
+    hits = 0
+    for f in sorted(PROGRAM_DIR.rglob("*.md")):
+        text = f.read_text(encoding="utf-8")
+        rel = f.relative_to(ROOT)
+        for label, replacement, defect in banned:
+            pattern = re.compile(r"\s+".join(re.escape(w) for w in label.split()))
+            for m in pattern.finditer(text):
+                hits += 1
+                line_no = text.count("\n", 0, m.start()) + 1
+                fail(
+                    f"{rel}:{line_no}: надпись {label!r} измерена как неверная "
+                    f"({defect}); в интерфейсе — {replacement}"
+                )
+    if not hits:
+        ok(
+            f"program/**/*.md: ни одной из {len(banned)} надписей, измеренных "
+            f"как неверные ({UI_LABELS.relative_to(ROOT)}, раздел 2)"
+        )
+
+    unconfirmed = len(_registry_rows("## 3. Надписи, прогоном не подтверждённые"))
+    if unconfirmed:
+        warn(
+            f"{UI_LABELS.relative_to(ROOT)}: {unconfirmed} надписи взяты не с экрана "
+            f"— подтвердить или опровергнуть на первом прогоне M4 (раздел 3)"
+        )
+
+
 def strip_code(text: str) -> str:
     """Убирает блоки кода и `инлайн-код` перед проверкой запрещённых слов —
     она проверяет прозу для читателя, а не код: коды ошибок Excel
@@ -1125,6 +1198,7 @@ def main() -> int:
     check_data_readme_counts()
     check_reference_csv_state()
     check_data_dir_no_stray_files()
+    check_ui_labels()
 
     if PROGRAM_DIR.exists():
         step_files = [f for f in PROGRAM_DIR.rglob("*.md") if f.name != "pilot-report.md"]
