@@ -37,7 +37,14 @@ if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
 HERE = Path(__file__).resolve().parent
-SRC = HERE / "csv"
+
+# Режим `--next`: тот же расчёт на папке следующего месяца. Эталоны для
+# умения C2 (`step-05.md`) обязаны считаться **тем же кодом**, что и
+# эталоны шага 04, иначе сверка после Refresh проверяет не повторяемость
+# очистки, а совпадение двух разных реализаций одной формулы.
+NEXT = "--next" in sys.argv
+SRC = HERE / ("csv_next" if NEXT else "csv")
+PREFIX = "ref_next_" if NEXT else "ref_"
 
 MIDPOINT_GUARD = Decimal("0.000001")
 
@@ -62,6 +69,7 @@ def q(value: Decimal, places: str) -> Decimal:
 
 
 def write_ref(name: str, header: list[str], rows: list[list[str]]) -> None:
+    name = PREFIX + name
     with (HERE / name).open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f, lineterminator="\r\n")
         w.writerow(header)
@@ -73,6 +81,7 @@ def main() -> int:
     tx = read("transactions.csv")
     cats = read("mcc_categories.csv")
     plans = read("merchant_plan.csv")
+    merchants = read("merchants.csv")
 
     plan_by_key = {(p["merchant_ref"], p["period_ym"]): p for p in plans}
     cat_name = {c["code"]: c["category_name"] for c in cats}
@@ -104,10 +113,24 @@ def main() -> int:
         ))
     by_cat.sort(key=lambda t: t[2], reverse=True)
     write_ref(
-        "ref_by_category.csv",
+        "by_category.csv",
         ["category_name", "Total Amount", "Settled Amount", "Tx Count", "Decline Rate"],
         [[n, f"{t}", f"{s}", str(c), f"{d}"] for n, t, s, c, d in by_cat],
     )
+
+    # ---- визуал городов: город × Total Amount. Заведён ради условия 3
+    # критерия C2 (решение 22): файл следующего месяца содержит кириллицу,
+    # которой не было в первом (город «Ужгород»). Проверяется файлом, а не
+    # взглядом на экран: испорченная кодировка даёт другую строку, и сверка
+    # называет её адресно.
+    city_of = {m["merchant_id"]: m["city"] for m in merchants}
+    by_city_sum = defaultdict(Decimal)
+    for r in tx:
+        by_city_sum[city_of[r["merchant_id"]]] += Decimal(r["amount_uah"])
+    city_rows = sorted(((c, q(v, "0.01")) for c, v in by_city_sum.items()),
+                       key=lambda t: t[1], reverse=True)
+    write_ref("by_city.csv", ["city", "Total Amount"],
+              [[c, f"{v}"] for c, v in city_rows])
 
     # ---- визуал 2: год, месяц × Settled Amount, Settled YTD (по дате операции)
     by_month = defaultdict(Decimal)
@@ -123,7 +146,7 @@ def main() -> int:
         running[y] += by_month[(y, m)]
         ytd_rows.append([str(y), str(m), f"{q(by_month[(y, m)], '0.01')}",
                          f"{q(running[y], '0.01')}"])
-    write_ref("ref_month_ytd.csv",
+    write_ref("month_ytd.csv",
               ["year", "month_no", "Settled Amount", "Settled YTD"], ytd_rows)
 
     # ---- визуал 3: тариф × Commission (составной ключ мерчант+период)
@@ -138,7 +161,7 @@ def main() -> int:
         commission_total += value
     plan_rows = sorted(((k, q(v, "0.01")) for k, v in commission.items()),
                        key=lambda t: t[1], reverse=True)
-    write_ref("ref_plan_commission.csv", ["plan_code", "Commission"],
+    write_ref("plan_commission.csv", ["plan_code", "Commission"],
               [[k, f"{v}"] for k, v in plan_rows])
 
     # ---- визуал итогов: шесть мер одной строкой, без разрезов
@@ -155,7 +178,7 @@ def main() -> int:
     last_year = months[-1][0]
     settled_ytd = q(running[last_year], "0.01")
     write_ref(
-        "ref_totals.csv",
+        "totals.csv",
         ["Total Amount", "Settled Amount", "Tx Count", "Decline Rate", "Commission", "Settled YTD"],
         [[f"{all_total}", f"{all_settled}", str(all_count), f"{all_rate}",
           f"{q(commission_total, '0.01')}", f"{settled_ytd}"]],

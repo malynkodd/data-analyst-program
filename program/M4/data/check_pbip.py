@@ -462,7 +462,88 @@ def compare_export(got: Path, want: Path) -> str:
     return ""
 
 
-CHECKS = {"01": check_step01, "02": check_step02, "03": check_step03, "04": check_step04}
+PARAMETER_NAME = "DataFolder"
+
+# Литеральный путь к папке данных в M-коде — ровно то, что параметр
+# заменяет. Ищутся обе папки: оставшийся `csv\` означает незаконченный
+# перевод запроса, оставшийся `csv_next\` — подмену правкой запроса, а не
+# значения параметра. И то и другое — «ручная правка», которой критерий C2
+# считает ноль.
+LITERAL_FOLDERS = ("data\\csv\\", "data\\csv_next\\")
+
+EXPECTED_NEXT_EXPORTS = {
+    "export_next_by_category.csv": "ref_next_by_category.csv",
+    "export_next_by_city.csv": "ref_next_by_city.csv",
+    "export_next_totals.csv": "ref_next_totals.csv",
+}
+
+
+def check_step05(project: Path, exports: Path) -> None:
+    """Умение C2: подмена источника — сменой значения параметра, а не
+    правкой пяти запросов; доказательство — файл, а не отсутствие ошибок.
+
+    Первое условие критерия C2 («0 ошибок при Refresh») здесь не
+    проверяется намеренно: решение 22 отменило его как самостоятельное —
+    прогон дал 0 ошибок на молча испорченной кодировке."""
+    sem = semantic_dir(project)
+    tmdl = sorted(sem.rglob("*.tmdl")) if sem else []
+    tables = [p for p in table_files(project) if p.stem in EXPECTED_TABLES]
+
+    # Параметр ищется по всем .tmdl модели, кроме файлов таблиц: в какой
+    # именно файл Desktop кладёт выражения, прогоном не измерено, и
+    # завязываться на имя файла — значит проверять догадку.
+    defined = [p for p in tmdl if p not in set(table_files(project))
+               and PARAMETER_NAME in read(p)]
+    if defined:
+        ok(f"параметр {PARAMETER_NAME} заведён в модели: {defined[0].name}")
+    else:
+        bad(f"параметра {PARAMETER_NAME} в модели нет — искали во всех *.tmdl, "
+            f"кроме файлов таблиц (задание 3)")
+
+    if len(tables) != len(EXPECTED_TABLES):
+        bad(f"таблиц модуля в модели {len(tables)}, а должно быть {len(EXPECTED_TABLES)}")
+
+    for path in tables:
+        body = read(path)
+        literal = [f for f in LITERAL_FOLDERS if f.lower() in body.lower()]
+        if literal:
+            bad(f"{path.stem}.tmdl: путь к папке записан в запросе литералом "
+                f"({literal[0]}) — источник подменяется значением параметра, "
+                f"а не правкой запроса")
+        elif PARAMETER_NAME not in body:
+            bad(f"{path.stem}.tmdl: запрос не читает файл через {PARAMETER_NAME}")
+        else:
+            ok(f"{path.stem}.tmdl: источник берётся через {PARAMETER_NAME}, "
+               f"литерального пути к папке нет")
+
+    absent = sorted({s for p in tables for s in M_CODE_REQUIRED if s not in read(p)})
+    if absent:
+        bad(f"перевод на параметр задел разбор файла: в M-коде пропало "
+            f"{', '.join(absent)} (четвёртое условие C2)")
+    else:
+        ok(f"разбор файла не задет: Encoding, QuoteStyle и культура на месте "
+           f"во всех {len(tables)} запросах")
+
+    if not exports.is_dir():
+        bad(f"папки выгрузок {exports} нет — задание 8 не выполнено")
+        return
+    for name, ref_name in EXPECTED_NEXT_EXPORTS.items():
+        got, want = exports / name, HERE / ref_name
+        if not want.exists():
+            bad(f"эталона {ref_name} нет — не запущен reference_m4.py --next (задание 2)")
+            continue
+        if not got.exists():
+            bad(f"выгрузки {name} нет в {exports} — визуал не экспортирован")
+            continue
+        diff = compare_export(got, want)
+        if diff:
+            bad(f"{name}: не сходится с {ref_name} — {diff}")
+        else:
+            ok(f"{name}: сходится с {ref_name}, расхождение 0")
+
+
+CHECKS = {"01": check_step01, "02": check_step02, "03": check_step03,
+          "04": check_step04, "05": check_step05}
 
 
 def main() -> int:
@@ -482,8 +563,8 @@ def main() -> int:
 
     exports = Path(args.exports) if args.exports else project / "export"
     print(f"Проект: {project.resolve()}  шаг: {args.step}\n")
-    if args.step == "04":
-        check_step04(project, exports)
+    if args.step in ("04", "05"):
+        CHECKS[args.step](project, exports)
     else:
         CHECKS[args.step](project)
 
