@@ -230,6 +230,11 @@ def check_step_skill_header() -> None:
 STEP_HOURS = re.compile(rf"^Время:\s*([\d.]+){DASH}([\d.]+)\s*ч", re.MULTILINE)
 MODULE_ROW_ID = re.compile(r"^(M\d+)\b")
 
+# Пометка в строке модуля части 6.1: вилка не оценена, а поставлена по
+# построчной сумме уже написанных шагов (решение 28). Меняет текст [WARN]
+# при совпадении суммы с вилкой по обеим границам — см. check_module_hours.
+BY_FACT_MARK = "вилка по факту (решение 28)"
+
 
 def _fmt(x: float) -> str:
     return f"{x:g}"
@@ -253,12 +258,23 @@ def check_module_hours(blueprint_text: str) -> None:
     (б) Сумма целиком вне вилки — то, что случилось с M3 (37–47 при
     60–80). Это сигнал сначала искать недостающее содержание (там его и
     нашли: шаги 09–12 довели сумму до 60–77), и только потом править
-    вилку."""
+    вилку.
+
+    (в) Случай (а) бывает двух разных происхождений, и различить их обязан
+    вывод, а не память читателя. У M0/M1/M2 сумму шагов подвели под
+    известную вилку; у M4 наоборот — вилку поставили по посчитанной сумме
+    (решение 28). После правки вилки M4 одинаковую строку «признак
+    подгонки» печатали четыре модуля из пяти, и два из них означали
+    противоположное. Четыре одинаковых предупреждения, часть которых
+    означает разное, — это шум, а шум перестают читать. Поэтому строка
+    части 6.1 может нести пометку «вилка по факту (решение 28)», и для
+    таких модулей печатается другое сообщение."""
     if not PROGRAM_DIR.exists():
         return
 
     part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
     brackets: dict[str, tuple[int, int]] = {}
+    by_fact: set[str] = set()
     for line in part61.splitlines():
         if not line.startswith("|") or re.match(r"^\|[\s:\-|]+\|?$", line):
             continue
@@ -269,6 +285,8 @@ def check_module_hours(blueprint_text: str) -> None:
         rng = parse_range(cells[1])
         if m and rng:
             brackets[m.group(1)] = rng
+            if BY_FACT_MARK in line:
+                by_fact.add(m.group(1))
 
     module_dirs = sorted(
         (p for p in PROGRAM_DIR.iterdir() if p.is_dir() and re.fullmatch(r"M\d+", p.name)),
@@ -305,10 +323,21 @@ def check_module_hours(blueprint_text: str) -> None:
             f"{d.name}: сумма {len(pairs)} шагов {_fmt(low)}{DASH}{_fmt(high)} ч "
             f"при вилке 6.1 {b_low}{DASH}{b_high}"
         )
-        if low == b_low and high == b_high:
+        if low == b_low and high == b_high and d.name in by_fact:
+            warn(
+                f"{label} — вилка выставлена по сумме шагов «{BY_FACT_MARK}», "
+                f"прохождением не подтверждена: калибровать её нечем, пока "
+                f"модуль никто не прошёл"
+            )
+        elif low == b_low and high == b_high:
             warn(
                 f"{label} — совпадение по обеим границам: признак подгонки суммы "
                 f"под вилку, а не подтверждение оценок (решение 24)"
+            )
+        elif d.name in by_fact:
+            warn(
+                f"{label} — вилка помечена «{BY_FACT_MARK}», но сумма шагов с ней "
+                f"уже расходится: пометка устарела — править вилку или снимать пометку"
             )
         elif high < b_low or low > b_high:
             warn(
@@ -320,6 +349,101 @@ def check_module_hours(blueprint_text: str) -> None:
 
     if reported == 0:
         ok("часы по модулям: ни одного модуля с разобранными часами шагов")
+
+
+PART2_TOTAL_ROW = re.compile(r"^Итого (ядро|обвязка)$")
+PART2_HEADING_RANGE = re.compile(rf"(\d+){DASH}(\d+) ч")
+
+
+def check_part2_hours(blueprint_text: str) -> None:
+    """Часы в частях 2.1 и 2.2 blueprint против части 6.1.
+
+    Те же числа стоят в двух таблицах, и однажды они уже разъехались: итоги
+    ядра и обвязки в части 2 остались в редакции до решения 14 (253–360 и
+    109–136), пока CLAUDE.md и часть 6.1 полтора месяца несли 252–359 и
+    110–137. Нашлось это не скриптом, а глазами — при правке вилки M4
+    (решение 28). Проверка сверяет три вещи в каждой части: вилку каждого
+    модуля против 6.1, строку «Итого» против построчной суммы своей же
+    таблицы и число в заголовке раздела против той же суммы."""
+    part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
+    ref: dict[str, tuple[int, int]] = {}
+    for line in part61.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        m = MODULE_ROW_ID.match(cells[0].strip("*"))
+        rng = parse_range(cells[1])
+        if m and rng:
+            ref[m.group(1)] = rng
+
+    parts = (("2.1", "## 2.1.", "## 2.2."), ("2.2", "## 2.2.", "## 2.3."))
+    checked = 0
+    for name, start, end in parts:
+        text = section(blueprint_text, start, end)
+        heading = text.splitlines()[0] if text else ""
+        low = high = 0
+        rows = 0
+        problems = 0
+        declared: tuple[int, int] | None = None
+        for line in text.splitlines():
+            if not line.startswith("|"):
+                continue
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if len(cells) < 3:
+                continue
+            label = cells[0].strip("*")
+            rng = parse_range(cells[2].strip("*"))
+            if rng and PART2_TOTAL_ROW.match(label):
+                declared = rng
+                continue
+            m = MODULE_ROW_ID.match(label)
+            if not (m and rng):
+                continue
+            rows += 1
+            low += rng[0]
+            high += rng[1]
+            expected = ref.get(m.group(1))
+            if expected is None:
+                fail(f"часть {name}: модуль {m.group(1)} есть в части 2, но не в части 6.1")
+                problems += 1
+            elif expected != rng:
+                fail(
+                    f"часть {name}: {m.group(1)} заявляет {rng[0]}{DASH}{rng[1]} ч, "
+                    f"а часть 6.1 — {expected[0]}{DASH}{expected[1]}"
+                )
+                problems += 1
+            checked += 1
+
+        if rows == 0:
+            fail(f"часть {name}: не удалось распарсить ни одной строки модуля")
+            continue
+        if declared is None:
+            fail(f"часть {name}: в таблице нет строки «Итого» с вилкой часов")
+            problems += 1
+        elif declared != (low, high):
+            fail(
+                f"часть {name}: строка «Итого» заявляет {declared[0]}{DASH}{declared[1]}, "
+                f"а построчная сумма таблицы — {low}{DASH}{high}"
+            )
+            problems += 1
+        m = PART2_HEADING_RANGE.search(heading)
+        if not m:
+            fail(f"часть {name}: в заголовке раздела нет числа часов вида «N{DASH}M ч»")
+            problems += 1
+        elif (int(m.group(1)), int(m.group(2))) != (low, high):
+            fail(
+                f"часть {name}: заголовок раздела заявляет {m.group(1)}{DASH}{m.group(2)} ч, "
+                f"а построчная сумма таблицы — {low}{DASH}{high}"
+            )
+            problems += 1
+        if problems == 0:
+            ok(f"часть {name}: {rows} модулей, сумма {low}{DASH}{high} ч — "
+               f"совпадает с заголовком, строкой «Итого» и вилками части 6.1")
+
+    if checked == 0:
+        fail("части 2.1/2.2: ни одной строки модуля не сверено с частью 6.1")
 
 
 def check_skill_ids(blueprint_text: str) -> None:
@@ -1187,6 +1311,7 @@ def main() -> int:
     claude_text = CLAUDE_MD.read_text(encoding="utf-8")
 
     check_hours(blueprint_text, claude_text)
+    check_part2_hours(blueprint_text)
     check_module_hours(blueprint_text)
     check_skill_ids(blueprint_text)
     check_step_skill_header()
