@@ -161,18 +161,44 @@ def read_fees() -> tuple[dict[int, Decimal], list[tuple[int, Decimal]], int, int
     return fees, items, len(items), duplicates
 
 
+def partner_book(raw_partners: list[dict], drop_dup_codes: bool,
+                 collapse_empty: bool) -> list[dict]:
+    """Справочник в одном из четырёх состояний. Две развилки независимы:
+    что сделано с тремя дублями кода и что сделано с пятью записями без
+    кода. Слово «дедуплицирован» само по себе их не различает — и разница
+    между «схлопнуть только непустые» и «схлопнуть всё» больше, чем весь
+    эффект от дублей."""
+    book: list[dict] = []
+    seen: set[str] = set()
+    for p in raw_partners:
+        key = p["code"]
+        if key:
+            if drop_dup_codes and key in seen:
+                continue
+        elif collapse_empty and "" in seen:
+            continue
+        seen.add(key)
+        book.append(p)
+    return book
+
+
 def naive_variants(paid: list[dict], raw_partners: list[dict],
-                   deduped: list[dict], rates: dict[date, Decimal],
+                   rates: dict[date, Decimal],
                    fee_items: list[tuple[int, Decimal]]) -> tuple[list[list], dict]:
-    """«Наивный merge» — четыре разных числа, потому что определений четыре.
+    """«Наивный merge» — восемь разных чисел, потому что определений восемь.
 
     Заведено после того, как одно и то же действие дало 5571 у читателя и
-    5399 в первой редакции этого файла. Оба верны, но под разными
-    определениями: читатель соединял справочник **как он прочитан**
-    (63 строки) обычным `merge` (у pandas `how="inner"` по умолчанию), а
-    первая редакция успевала снять дубли кода. Число, попадающее в шаг как
-    «типичная ошибка», обязано приходить с определением рядом — иначе
-    учащийся получит своё и решит, что сломал датасет.
+    5399 в первой редакции этого файла; третья развилка нашлась таким же
+    способом — читатель схлопнул и пустые коды тоже и получил 3523. Все
+    числа верны, различаются определения. Развилок три и они независимы:
+
+    1. тип соединения: `inner` (умолчание pandas) или `left`;
+    2. три дубля кода в справочнике: оставлены или сняты;
+    3. пять записей без кода: оставлены все или схлопнуты в одну.
+
+    Число, попадающее в шаг как «типичная ошибка», обязано приходить со
+    всеми тремя ответами рядом — иначе учащийся получит своё и решит, что
+    сломал датасет.
 
     Считается здесь, а не в pandas, по тем же правилам соединения:
     inner — по строке на каждую пару совпавших ключей; left — то же, плюс
@@ -190,14 +216,16 @@ def naive_variants(paid: list[dict], raw_partners: list[dict],
 
     table = []
     for how in ("inner", "left"):
-        for label, partners in (("как прочитан, 63 строки", raw_partners),
-                                ("дедуплицирован по коду, 60 строк", deduped)):
-            n = rows_after(partners, how)
-            table.append([
-                "inner (умолчание pandas)" if how == "inner" else "left",
-                label, len(paid), n,
-                f"{(n / len(paid) - 1) * 100:.1f}%",
-            ])
+        for drop_dup, dup_label in ((False, "оставлены"), (True, "сняты")):
+            for collapse, empty_label in ((False, "оставлены все пять"),
+                                          (True, "схлопнуты в одну")):
+                book = partner_book(raw_partners, drop_dup, collapse)
+                n = rows_after(book, how)
+                table.append([
+                    "inner (умолчание pandas)" if how == "inner" else "left",
+                    dup_label, empty_label, len(book), len(paid), n,
+                    f"{(n / len(paid) - 1) * 100:+.1f}%",
+                ])
 
     # Сквозной наивный путь: справочник как прочитан, merge по умолчанию,
     # дубли пагинации не сняты. Ровно то, что получается, если не сделать
@@ -372,9 +400,18 @@ def main() -> int:
               [[m, f"{months[m]['gross']:.2f}", f"{months[m]['fee']:.2f}"]
                for m in sorted(months)])
 
-    naive_table, naive_end = naive_variants(paid, raw_partners, partners, rates, fee_items)
+    naive_table, naive_end = naive_variants(paid, raw_partners, rates, fee_items)
+    # Совпадение чисел опаснее расхождения: вариант «дубли сняты, записи без
+    # кода схлопнуты в одну» даёт ровно столько же строк, сколько эталон.
+    # Строки при этом другие — выплаты без кода получают одного и того же
+    # партнёра вместо своего по названию.
+    collapsed_book = partner_book(raw_partners, True, True)
+    stub = next(b for b in collapsed_book if not b["code"])
+    wrong_partner = sum(1 for pay, partner in matched_partner
+                        if not pay["partner_code"] and partner is not stub)
     write_csv("ref_naive_merge.csv",
-              ["способ соединения", "справочник", "вход", "строк после merge", "прирост"],
+              ["способ соединения", "дубли кода", "записи без кода",
+               "строк в справочнике", "вход", "строк после merge", "прирост"],
               naive_table)
 
     # --- печать всех числ, на которые будут ссылаться шаги ---------------
@@ -418,9 +455,13 @@ def main() -> int:
         print(f"  {m}: оборот {months[m]['gross']:.2f}, комиссия {months[m]['fee']:.2f}")
 
     print()
-    print("«Наивный merge» — четыре определения, четыре числа (вход 3534 PAID)")
-    for how, ref_book, entry, rows_n, growth in naive_table:
-        print(f"  {how:<24} справочник {ref_book:<34} -> {rows_n} строк, +{growth}")
+    print(f"«Наивный merge» — восемь определений, восемь чисел (вход {len(paid)} PAID)")
+    for how, dup, empty, book_n, _, rows_n, growth in naive_table:
+        print(f"  {how:<24} дубли {dup:<10} без кода {empty:<18} "
+              f"справочник {book_n} -> {rows_n} строк, {growth}")
+    print(f"  вариант «дубли сняты, без кода схлопнуты» даёт столько же строк, "
+          f"сколько эталон ({len(matched_partner)}), но у {wrong_partner} из них "
+          f"партнёр не тот")
     print("  сквозной наивный путь (справочник как прочитан, merge по умолчанию,")
     print("  дубли пагинации не сняты):")
     for key, value in naive_end.items():
