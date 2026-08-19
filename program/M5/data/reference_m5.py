@@ -11,6 +11,16 @@
     ref_join_report.csv     — вход/сопоставлено/потеряно на каждом join (B2)
     ref_partner_report.csv  — итоговый отчёт по партнёрам (B3, B4)
     ref_month_gross.csv     — оборот и комиссия по месяцам (B5)
+    ref_source_passport.csv — паспорт каждой выгрузки: шесть чисел, у
+                              каждого своё определение (шаг 02)
+    ref_name_variants.csv   — сколько вариантов названия партнёра даёт
+                              каждый способ сравнения (шаг 02, решение 30)
+
+Второй режим — `python reference_m5.py --traps`. Он дополнительно печатает
+семь измеренных ловушек шагов 02–03 и единственный во всём файле
+импортирует pandas: ловушка — это факт о поведении pandas, а не эталонное
+число, и меряется она тем инструментом, о котором говорит. Эталонные числа
+считаются без pandas всегда — причина ниже.
 
 **Почему эталон написан на стандартной библиотеке, а не на pandas.**
 Правило двойного авторства формулы (раздел 1.3 скилла curriculum-design):
@@ -284,6 +294,167 @@ def rate_for(day: date, rates: dict[date, Decimal]) -> Decimal | None:
     return rates[max(earlier)] if earlier else None
 
 
+SOURCE_SPECS = [
+    # файл, кодировка, разделитель, колонка суммы
+    ("payouts_2026_q1.csv", "cp1251", ";", "amount"),
+    ("payouts_2026_q2.csv", "utf-8-sig", ",", "total"),
+]
+
+
+def raw_sources() -> dict[str, dict]:
+    """Обе выгрузки как прочитаны: значения — строки, ничего не приведено
+    к типам и не нормализовано. На этих данных считается паспорт выгрузки
+    шага 02: там каждое число зависит от того, что сделано с краями,
+    регистром и пустыми, — и определение обязано стоять рядом с числом
+    (решение 30)."""
+    out: dict[str, dict] = {}
+    for name, enc, delim, amount_col in SOURCE_SPECS:
+        with (RAW / name).open(encoding=enc, newline="") as f:
+            reader = csv.DictReader(f, delimiter=delim)
+            header = list(reader.fieldnames or [])
+            rows = list(reader)
+        out[name] = {"rows": rows, "header": header, "amount": amount_col}
+    return out
+
+
+def source_passport(sources: dict[str, dict]) -> list[list]:
+    """Шесть чисел на файл, каждое со своим определением.
+
+    Определение меняет число сильнее всего у двух последних: «строк без
+    кода» зависит от обрезки краёв, «вариантов названия» — от способа
+    сравнения. Полная развилка по названиям — в `ref_name_variants.csv`,
+    двенадцать чисел от 62 до 302."""
+    table: list[list] = []
+    for name, spec in sources.items():
+        rows, amount = spec["rows"], spec["amount"]
+        total = sum(Decimal(r[amount].replace(",", ".")) for r in rows)
+        paid = sum(1 for r in rows if r["status"].strip().casefold() == "paid")
+        empty_code = sum(1 for r in rows if not r["partner_code"].strip())
+        variants = len({r["partner_name"] for r in rows})
+        table += [
+            [name, "строк данных", "строк файла без строки заголовка", len(rows)],
+            [name, "колонок", "полей в строке заголовка", len(spec["header"])],
+            [name, "сумма колонки " + amount,
+             "все строки файла, статус не фильтруется; десятичный знак "
+             "приведён к точке", "%.2f" % total],
+            [name, "строк со статусом PAID",
+             "сравнение без учёта регистра, края обрезаны", paid],
+            [name, "строк без кода партнёра",
+             "код пуст после обрезки краёв", empty_code],
+            [name, "вариантов названия партнёра",
+             "уникальных значений partner_name в этом файле, как прочитано: "
+             "края не обрезаны, внутренние пробелы не схлопнуты, регистр учтён",
+             variants],
+        ]
+    return table
+
+
+NAME_COMPARISONS = {
+    "как прочитано": lambda v: v,
+    "обрезка краёв": lambda v: v.strip(),
+    "обрезка краёв + схлопывание внутренних пробелов":
+        lambda v: SPACES.sub(" ", v).strip(),
+    "правило 3 канона (+ кавычки, casefold)": lambda v: norm_name(v),
+}
+
+
+def name_variants(sources: dict[str, dict]) -> list[list]:
+    """«Сколько в выгрузках вариантов названия партнёра» — четыре способа
+    сравнения на трёх базах, двенадцать чисел.
+
+    Заведено после того, как одно утверждение дало 278 у автора (база —
+    только q1) и 302 у читателя (база — обе выгрузки), причём оба числа
+    верны. Класс тот же, что у восьми чисел наивного merge: расходится не
+    расчёт, а определение. Число попадает в шаг только вместе со строкой
+    этой таблицы."""
+    q1 = [r["partner_name"] for r in sources["payouts_2026_q1.csv"]["rows"]]
+    q2 = [r["partner_name"] for r in sources["payouts_2026_q2.csv"]["rows"]]
+    bases = {
+        "payouts_2026_q1.csv": q1,
+        "payouts_2026_q2.csv": q2,
+        "обе выгрузки после склейки": q1 + q2,
+    }
+    return [[base, how, len({fn(v) for v in values})]
+            for base, values in bases.items()
+            for how, fn in NAME_COMPARISONS.items()]
+
+
+def measure_traps() -> list[str]:
+    """Семь ловушек шагов 02–03, измеренных на этом датасете.
+
+    Половина молчаливая: код отрабатывает и печатает число, а число
+    неверное. Такая ловушка попадает в 1.6 шага только с цифрой отсюда —
+    текстом исключения или величиной расхождения, а не описанием
+    словами."""
+    import pandas as pd  # единственный импорт pandas в файле, см. докстроку
+
+    q1, q2 = RAW / "payouts_2026_q1.csv", RAW / "payouts_2026_q2.csv"
+    lines = ["pandas " + pd.__version__]
+
+    try:
+        pd.read_csv(q1, sep=";")
+        lines.append("1. кодировка не названа: исключения нет — проверить вручную")
+    except UnicodeDecodeError as e:
+        lines.append("1. кодировка не названа (падает): %s" % e)
+
+    ignored = pd.read_csv(q1, sep=";", encoding="utf-8",
+                          encoding_errors="ignore", decimal=",")
+    correct = pd.read_csv(q1, sep=";", encoding="cp1251", decimal=",")
+    common = len(set(ignored["partner_name"]) & set(correct["partner_name"]))
+    lines.append(
+        '2. encoding_errors="ignore" (молча): строк %d — столько же; сумма '
+        "amount %.2f — та же (равенство с верным чтением: %s); вариантов "
+        "названия %d вместо %d, общих с верным чтением %d"
+        % (len(ignored), ignored["amount"].sum(),
+           ignored["amount"].sum() == correct["amount"].sum(),
+           ignored["partner_name"].nunique(),
+           correct["partner_name"].nunique(), common))
+
+    as_text = pd.read_csv(q1, sep=";", encoding="cp1251")
+    lines.append(
+        '3. decimal="," не назван (молча): dtype колонки amount — %s; .sum() '
+        "даёт не число, а строку длиной %d знаков"
+        % (as_text["amount"].dtype, len(as_text["amount"].sum())))
+
+    try:
+        pd.to_datetime(correct["payout_date"], format="%m.%d.%Y")
+        lines.append("4. формат даты перепутан: исключения нет — проверить вручную")
+    except ValueError as e:
+        lines.append("4. формат даты перепутан (падает): %s"
+                     % str(e).splitlines()[0])
+
+    right = pd.read_csv(q2, sep=",", encoding="utf-8-sig")
+    glued = pd.concat([correct, right], ignore_index=True)
+    lines.append(
+        "5. concat без переименования колонок (молча): колонок %d вместо %d; "
+        "строк %d — верно; сумма amount %.2f — это сумма только первой "
+        "выгрузки, у %d строк она пуста"
+        % (len(glued.columns), len(correct.columns), len(glued),
+           glued["amount"].sum(), int(glued["amount"].isna().sum())))
+    partners, _, _ = read_partners_and_rates()
+    book_codes = {q["code"] for q in partners if q["code"]}
+    as_float = correct["partner_code"].astype(str)
+    as_text = pd.read_csv(q1, sep=";", encoding="cp1251", decimal=",",
+                          dtype={"partner_code": "string"})["partner_code"]
+    lines.append(
+        "6. код партнёра прочитан числом (молча): dtype %s, первое значение "
+        "%s; со справочником совпало %d строк из %d. С dtype={\"partner_code\": "
+        '"string"} — %s, %s, совпало %d из %d при %d непустых'
+        % (correct["partner_code"].dtype, as_float.iloc[0],
+           int(as_float.isin(book_codes).sum()), len(correct),
+           as_text.dtype, as_text.iloc[0],
+           int(as_text.isin(book_codes).sum()), len(as_text),
+           int(as_text.notna().sum())))
+    lines.append(
+        "7. статус сравнивается с учётом регистра (молча): строк со "
+        'status == "PAID" — %d, без учёта регистра — %d; вторая выгрузка '
+        "пишет статусы строчными: %s"
+        % (int(glued["status"].eq("PAID").sum()),
+           int(glued["status"].str.upper().eq("PAID").sum()),
+           sorted(right["status"].unique())))
+    return lines
+
+
 def main() -> int:
     payouts = read_payouts()
     partners, raw_partners, rates = read_partners_and_rates()
@@ -400,6 +571,14 @@ def main() -> int:
               [[m, f"{months[m]['gross']:.2f}", f"{months[m]['fee']:.2f}"]
                for m in sorted(months)])
 
+    sources = raw_sources()
+    passport = source_passport(sources)
+    variants = name_variants(sources)
+    write_csv("ref_source_passport.csv",
+              ["файл", "показатель", "определение", "значение"], passport)
+    write_csv("ref_name_variants.csv",
+              ["база", "способ сравнения", "вариантов названия"], variants)
+
     naive_table, naive_end = naive_variants(paid, raw_partners, rates, fee_items)
     # Совпадение чисел опаснее расхождения: вариант «дубли сняты, записи без
     # кода схлопнуты в одну» даёт ровно столько же строк, сколько эталон.
@@ -467,6 +646,15 @@ def main() -> int:
         print(f"  {m}: оборот {months[m]['gross']:.2f}, комиссия {months[m]['fee']:.2f}")
 
     print()
+    print("Паспорт выгрузки — шесть чисел на файл (шаг 02)")
+    for file_name, metric, definition, value in passport:
+        print(f"  {file_name} | {metric}: {value}")
+        print(f"      определение: {definition}")
+    print()
+    print("Вариантов названия партнёра — двенадцать чисел (шаг 02)")
+    for base, how, n in variants:
+        print(f"  {base:<28} {how:<50} {n}")
+    print()
     print(f"«Наивный merge» — восемь определений, восемь чисел (вход {len(paid)} PAID)")
     for how, dup, empty, book_n, _, rows_n, growth in naive_table:
         print(f"  {how:<24} дубли {dup:<10} без кода {empty:<18} "
@@ -487,6 +675,12 @@ def main() -> int:
           f"{(naive_end['оборот'] / total_gross - 1) * 100:.1f}%")
     print(f"    завышение комиссии против эталона: "
           f"{(naive_end['комиссия'] / total_fee - 1) * 100:.1f}%")
+
+    if "--traps" in sys.argv:
+        print()
+        print("Измеренные ловушки шагов 02–03")
+        for line in measure_traps():
+            print("  " + line)
     return 0
 
 
