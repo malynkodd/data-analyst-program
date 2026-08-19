@@ -409,6 +409,18 @@ def main() -> int:
     stub = next(b for b in collapsed_book if not b["code"])
     wrong_partner = sum(1 for pay, partner in matched_partner
                         if not pay["partner_code"] and partner is not stub)
+    # Сколько выплат заглушка «угадала» — зависит от того, как сравниваются
+    # названия. Три сравнения — три числа; в тексте стоит третье, но и два
+    # других воспроизводимы, чтобы читатель со своим числом нашёл себя.
+    codeless = [pay for pay in paid if not pay["partner_code"]]
+    stub_hits = {
+        "строгое равенство": sum(1 for pay in codeless
+                                 if pay["partner_name"] == stub["name"]),
+        "одна обрезка краёв": sum(1 for pay in codeless
+                                  if pay["partner_name"].strip() == stub["name"].strip()),
+        "правило 3 канона": sum(1 for pay in codeless
+                                if norm_name(pay["partner_name"]) == norm_name(stub["name"])),
+    }
     write_csv("ref_naive_merge.csv",
               ["способ соединения", "дубли кода", "записи без кода",
                "строк в справочнике", "вход", "строк после merge", "прирост"],
@@ -462,6 +474,10 @@ def main() -> int:
     print(f"  вариант «дубли сняты, без кода схлопнуты» даёт столько же строк, "
           f"сколько эталон ({len(matched_partner)}), но у {wrong_partner} из них "
           f"партнёр не тот")
+    print(f"  заглушка при схлопывании — {stub['name']} (первая по порядку строк);"
+          f" из {len(codeless)} выплат без кода она угадала:")
+    for how, n in stub_hits.items():
+        print(f"    {how}: {n}")
     print("  сквозной наивный путь (справочник как прочитан, merge по умолчанию,")
     print("  дубли пагинации не сняты):")
     for key, value in naive_end.items():
