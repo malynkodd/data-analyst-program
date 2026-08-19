@@ -104,7 +104,7 @@ def read_payouts() -> list[dict]:
     return rows
 
 
-def read_partners_and_rates() -> tuple[list[dict], int, dict[date, Decimal]]:
+def read_partners_and_rates() -> tuple[list[dict], list[dict], dict[date, Decimal]]:
     """Лист «Партнери»: шапка занимает две строки, данные начинаются с
     третьей. Правило 4 — дедупликация по коду. Лист «Курс НБУ»: обычная
     шапка в одну строку."""
@@ -124,11 +124,9 @@ def read_partners_and_rates() -> tuple[list[dict], int, dict[date, Decimal]]:
 
     partners: list[dict] = []
     seen_codes: set[str] = set()
-    dropped = 0
     for p in raw_rows:
         if p["code"]:
             if p["code"] in seen_codes:
-                dropped += 1
                 continue
             seen_codes.add(p["code"])
         partners.append(p)
@@ -140,25 +138,114 @@ def read_partners_and_rates() -> tuple[list[dict], int, dict[date, Decimal]]:
         day, value = row[0], row[1]
         rates[date.fromisoformat(str(day))] = Decimal(str(value))
     wb.close()
-    return partners, dropped, rates
+    return partners, raw_rows, rates
 
 
-def read_fees() -> tuple[dict[int, Decimal], int, int]:
+def read_fees() -> tuple[dict[int, Decimal], list[tuple[int, Decimal]], int, int]:
     """Вложенный JSON со страницами. Правило пагинации: дубликаты по
-    `payout_id` снимаются, остаётся первая запись."""
+    `payout_id` снимаются, остаётся первая запись. Возвращается и список
+    элементов как есть — на нём считается наивный вариант."""
     payload = json.loads((RAW / "fees_api.json").read_text(encoding="utf-8"))
     fees: dict[int, Decimal] = {}
-    total = 0
+    items: list[tuple[int, Decimal]] = []
     duplicates = 0
     for page in payload["pages"]:
         for item in page["items"]:
-            total += 1
             pid = int(item["payout_id"])
+            amount = Decimal(item["fee"]["amount"])
+            items.append((pid, amount))
             if pid in fees:
                 duplicates += 1
                 continue
-            fees[pid] = Decimal(item["fee"]["amount"])
-    return fees, total, duplicates
+            fees[pid] = amount
+    return fees, items, len(items), duplicates
+
+
+def naive_variants(paid: list[dict], raw_partners: list[dict],
+                   deduped: list[dict], rates: dict[date, Decimal],
+                   fee_items: list[tuple[int, Decimal]]) -> tuple[list[list], dict]:
+    """«Наивный merge» — четыре разных числа, потому что определений четыре.
+
+    Заведено после того, как одно и то же действие дало 5571 у читателя и
+    5399 в первой редакции этого файла. Оба верны, но под разными
+    определениями: читатель соединял справочник **как он прочитан**
+    (63 строки) обычным `merge` (у pandas `how="inner"` по умолчанию), а
+    первая редакция успевала снять дубли кода. Число, попадающее в шаг как
+    «типичная ошибка», обязано приходить с определением рядом — иначе
+    учащийся получит своё и решит, что сломал датасет.
+
+    Считается здесь, а не в pandas, по тем же правилам соединения:
+    inner — по строке на каждую пару совпавших ключей; left — то же, плюс
+    несовпавшая строка остаётся одна. Пустой код совпадает с пустым кодом
+    (проверено на pandas 3.0.5: NaN там тоже совпал с NaN)."""
+    def rows_after(partners: list[dict], how: str) -> int:
+        index: dict[str, int] = {}
+        for p in partners:
+            index[p["code"]] = index.get(p["code"], 0) + 1
+        total = 0
+        for p in paid:
+            hits = index.get(p["partner_code"], 0)
+            total += hits if how == "inner" else max(hits, 1)
+        return total
+
+    table = []
+    for how in ("inner", "left"):
+        for label, partners in (("как прочитан, 63 строки", raw_partners),
+                                ("дедуплицирован по коду, 60 строк", deduped)):
+            n = rows_after(partners, how)
+            table.append([
+                "inner (умолчание pandas)" if how == "inner" else "left",
+                label, len(paid), n,
+                f"{(n / len(paid) - 1) * 100:.1f}%",
+            ])
+
+    # Сквозной наивный путь: справочник как прочитан, merge по умолчанию,
+    # дубли пагинации не сняты. Ровно то, что получается, если не сделать
+    # ничего из правил 3–6 канона.
+    by_code: dict[str, list[dict]] = {}
+    for p in raw_partners:
+        by_code.setdefault(p["code"], []).append(p)
+    fees_by_id: dict[int, list[Decimal]] = {}
+    for pid, amount in fee_items:
+        fees_by_id.setdefault(pid, []).append(amount)
+
+    rows = [(p, partner) for p in paid for partner in by_code.get(p["partner_code"], [])]
+    usd = sum(1 for p, _ in rows if p["currency"] == "USD")
+    with_rate = []
+    no_rate = 0
+    for p, partner in rows:
+        if p["currency"] == "UAH":
+            with_rate.append((p, Decimal("1")))
+            continue
+        rate = rate_for(p["payout_date"], rates)
+        if rate is None:
+            no_rate += 1
+            continue
+        with_rate.append((p, rate))
+    after_fee_join = 0
+    gross = fee_total = Decimal("0")
+    counted = no_fee = 0
+    for p, rate in with_rate:
+        matches = fees_by_id.get(p["payout_id"], [])
+        after_fee_join += max(len(matches), 1)
+        if not matches:
+            no_fee += 1
+            continue
+        for fee in matches:
+            counted += 1
+            gross += p["amount"] if p["currency"] == "UAH" else money(p["amount"] * rate)
+            fee_total += fee
+    end_to_end = {
+        "после join со справочником": len(rows),
+        "валютных строк": usd,
+        "без курса": no_rate,
+        "после join с комиссиями": after_fee_join,
+        "без комиссии": no_fee,
+        "строк в итоге": counted,
+        "оборот": gross,
+        "комиссия": fee_total,
+    }
+    return table, end_to_end
 
 
 def rate_for(day: date, rates: dict[date, Decimal]) -> Decimal | None:
@@ -171,8 +258,9 @@ def rate_for(day: date, rates: dict[date, Decimal]) -> Decimal | None:
 
 def main() -> int:
     payouts = read_payouts()
-    partners, dup_partners, rates = read_partners_and_rates()
-    fees, fees_total, fees_duplicates = read_fees()
+    partners, raw_partners, rates = read_partners_and_rates()
+    dup_partners = len(raw_partners) - len(partners)
+    fees, fee_items, fees_total, fees_duplicates = read_fees()
 
     by_code = {p["code"]: p for p in partners if p["code"]}
     by_name: dict[str, dict] = {}
@@ -284,6 +372,11 @@ def main() -> int:
               [[m, f"{months[m]['gross']:.2f}", f"{months[m]['fee']:.2f}"]
                for m in sorted(months)])
 
+    naive_table, naive_end = naive_variants(paid, raw_partners, partners, rates, fee_items)
+    write_csv("ref_naive_merge.csv",
+              ["способ соединения", "справочник", "вход", "строк после merge", "прирост"],
+              naive_table)
+
     # --- печать всех числ, на которые будут ссылаться шаги ---------------
     print("B1 — загрузка четырёх файлов")
     print(f"  payouts_2026_q1.csv: {q1} строк")
@@ -323,6 +416,20 @@ def main() -> int:
     print("B5 — по месяцам")
     for m in sorted(months):
         print(f"  {m}: оборот {months[m]['gross']:.2f}, комиссия {months[m]['fee']:.2f}")
+
+    print()
+    print("«Наивный merge» — четыре определения, четыре числа (вход 3534 PAID)")
+    for how, ref_book, entry, rows_n, growth in naive_table:
+        print(f"  {how:<24} справочник {ref_book:<34} -> {rows_n} строк, +{growth}")
+    print("  сквозной наивный путь (справочник как прочитан, merge по умолчанию,")
+    print("  дубли пагинации не сняты):")
+    for key, value in naive_end.items():
+        printed = f"{value:.2f}" if isinstance(value, Decimal) else value
+        print(f"    {key}: {printed}")
+    print(f"    завышение оборота против эталона: "
+          f"{(naive_end['оборот'] / total_gross - 1) * 100:.1f}%")
+    print(f"    завышение комиссии против эталона: "
+          f"{(naive_end['комиссия'] / total_fee - 1) * 100:.1f}%")
     return 0
 
 
