@@ -26,6 +26,10 @@ program/M6/data/raw/
 # `generate_m8.py`, сходимость — по трём sha256 из `reference_answers.md`.
 program/M8/data/raw/
 
+# Сгенерированный датасет M11: то же правило (решение 29). Воспроизводится
+# `generate_m11.py`, сходимость — по трём sha256 из `reference_answers.md`.
+program/M11/data/raw/
+
 # Локальное состояние проектов Power BI Desktop: кэш модели (`cache.abf`,
 # до 260 КБ и переписывается каждым открытием) и настройки окна. Desktop
 # пишет такой `.gitignore` сам, но измеренно — только в **новую папку вне
