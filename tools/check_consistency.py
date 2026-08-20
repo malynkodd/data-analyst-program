@@ -227,7 +227,12 @@ def check_step_skill_header() -> None:
         )
 
 
-STEP_HOURS = re.compile(rf"^Время:\s*([\d.]+){DASH}([\d.]+)\s*ч", re.MULTILINE)
+# Вторая граница необязательна: точечная оценка ("Время: 3 ч") законна,
+# когда объём задан внешним фактом, а не диапазоном (M13 — "объём задан
+# 40 вакансиями", часть 4 blueprint, решение 1; часть 6.1 несёт для него
+# точку "8", а не диапазон, и parse_range() уже поддерживает эту форму
+# для таблиц — здесь то же допущение для строки шага).
+STEP_HOURS = re.compile(rf"^Время:\s*([\d.]+)(?:{DASH}([\d.]+))?\s*ч", re.MULTILINE)
 MODULE_ROW_ID = re.compile(r"^(M\d+)\b")
 
 # Пометка в строке модуля части 6.1: вилка не оценена, а поставлена по
@@ -308,7 +313,9 @@ def check_module_hours(blueprint_text: str) -> None:
         for f in steps:
             m = STEP_HOURS.search(f.read_text(encoding="utf-8"))
             if m:
-                pairs.append((float(m.group(1)), float(m.group(2))))
+                low = float(m.group(1))
+                high = float(m.group(2)) if m.group(2) is not None else low
+                pairs.append((low, high))
             else:
                 no_hours.append(f.name)
         if no_hours:
