@@ -34,6 +34,10 @@ program/M11/data/raw/
 # `generate_p1.py`, сходимость — по sha256 из `reference_answers.md`.
 program/P1/data/raw/
 
+# Сгенерированный датасет P2: то же правило (решение 29). Воспроизводится
+# `generate_p2.py`, сходимость — по двум sha256 из `reference_answers.md`.
+program/P2/data/raw/
+
 # Локальное состояние проектов Power BI Desktop: кэш модели (`cache.abf`,
 # до 260 КБ и переписывается каждым открытием) и настройки окна. Desktop
 # пишет такой `.gitignore` сам, но измеренно — только в **новую папку вне
