@@ -3328,7 +3328,7 @@ OK: _neg_a.txt is older than _neg_b.txt
 
 Затронуто: `program/M1/data/check_order.py`.
 
-Статус: открыт
+Статус: закрыт 2026-08-21, d4110a6, program/M1/data/check_order.py
 
 **Отрицательный пример к обобщённой нумерации серий в `check_defect_status()`.**
 До этого захода `DEFECT_HEADING` в `tools/check_consistency.py` матчил
