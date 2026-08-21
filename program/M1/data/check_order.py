@@ -26,6 +26,7 @@ def main():
         print(f"OK: {first} is older than {second}")
     else:
         print(f"FAIL: {first} is NOT older than {second}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

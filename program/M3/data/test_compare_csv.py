@@ -1,13 +1,33 @@
 """Тест `compare_csv.py`: что скрипт засчитывает и что обязан отвергнуть.
 
-Запуск (из `program/M3/data/`):
+Запуск как скрипта (из `program/M3/data/`):
 
     python test_compare_csv.py
 
 Печатает построчный отчёт и итог. Код возврата: 0 — все случаи прошли,
-1 — хотя бы один не прошёл. Ничего не изменяет и не оставляет файлов на
-диске: временные CSV создаются в системном каталоге временных файлов и
-удаляются.
+1 — хотя бы один не прошёл.
+
+Запуск через pytest (из того же каталога):
+
+    python -m pytest test_compare_csv.py -v
+
+Три функции `test_space_literals`, `test_values`, `test_files` — точки
+входа для pytest; каждая падает через `assert`, если хоть один случай не
+сошёлся, и печатает список несошедшихся случаев в сообщении ассерта.
+Общая логика проверки (какие случаи и какой исход ожидается) не
+дублируется между двумя режимами — оба читают одни и те же `_run_*_cases()`.
+
+**Кириллица в тексте ассерта под pytest на Windows.** Запуск как скрипта
+сам чинит кодировку консоли (`sys.stdout.reconfigure`, решение 17); текст
+диагностики `pytest` в собственный терминальный вывод об упавшем assert
+идёт мимо этой перенастройки и на нестандартной кодовой странице
+Windows-консоли может выйти "кракозябрами" — измерено прогоном
+(`research/tools-gate.md`). Проверка при этом падает верно, портится
+только читаемость сообщения. Лечится запуском с явной переменной
+окружения: `PYTHONIOENCODING=utf-8 python -m pytest test_compare_csv.py -v`.
+
+Ничего не изменяет и не оставляет файлов на диске: временные CSV
+создаются в системном каталоге временных файлов и удаляются.
 
 Зачем нужен именно **негативный** тест, а не проверка «на нормальных
 данных». Правка `same_value()` по находке P9 (`research/tools-gate.md`)
@@ -95,48 +115,41 @@ FILE_CASES: list[tuple[str, list[str], list[str], int]] = [
 ]
 
 
-def check_space_literals() -> tuple[int, int]:
+def _run_space_literal_cases() -> list[tuple[bool, str]]:
     """Три пробела в `normalize_number()` обязаны быть тремя разными
     символами. Если бы кто-то при правке заменил их на три обычных
     пробела, разделитель разрядов перестал бы сниматься молча: тест на
     значениях это ловит, но не объясняет причину, а этот — объясняет."""
-    print("Пробелы-разделители разрядов:")
-    passed = failed = 0
+    results = []
     for name, value in (("неразрывный U+00A0", NBSP), ("узкий неразрывный U+202F", NNBSP)):
         got = normalize_number(f"1{value}234,56")
-        if got == "1234.56":
-            print(f"  [OK]   {name} снимается")
-            passed += 1
-        else:
-            print(f"  [FAIL] {name} не снят: normalize_number дал {got!r}, ждали '1234.56'")
-            failed += 1
-    return passed, failed
+        ok = got == "1234.56"
+        msg = f"{name} снимается" if ok else f"{name} не снят: normalize_number дал {got!r}, ждали '1234.56'"
+        results.append((ok, msg))
+    return results
 
 
-def check_values() -> tuple[int, int]:
-    print("Сравнение значений (same_value):")
-    passed = failed = 0
+def _run_value_cases() -> list[tuple[bool, str]]:
+    results = []
     for name, got, want, expected in VALUE_CASES:
         actual = same_value(got, want)
-        if actual == expected:
-            mark = "совпадение" if expected else "расхождение"
-            print(f"  [OK]   {name}: {got!r} / {want!r} — {mark}")
-            passed += 1
+        ok = actual == expected
+        mark = "совпадение" if expected else "расхождение"
+        if ok:
+            msg = f"{name}: {got!r} / {want!r} — {mark}"
         else:
-            print(
-                f"  [FAIL] {name}: {got!r} / {want!r} — "
-                f"ждали {'совпадение' if expected else 'расхождение'}, "
+            msg = (
+                f"{name}: {got!r} / {want!r} — ждали {mark}, "
                 f"получили {'совпадение' if actual else 'расхождение'}"
             )
-            failed += 1
-    return passed, failed
+        results.append((ok, msg))
+    return results
 
 
-def check_files() -> tuple[int, int]:
+def _run_file_cases() -> list[tuple[bool, str]]:
     """Сквозная проверка: не функция сравнения, а сам запуск скрипта на
     двух файлах — вместе с разбором CSV, снятием BOM и кодом возврата."""
-    print("Сквозной запуск (main на двух файлах):")
-    passed = failed = 0
+    results = []
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         for i, (name, mine, ref, expected) in enumerate(FILE_CASES):
@@ -147,21 +160,51 @@ def check_files() -> tuple[int, int]:
             mine_path.write_text("\r\n".join(mine) + "\r\n", encoding="utf-8", newline="")
             ref_path.write_text("\r\n".join(ref) + "\r\n", encoding="utf-8", newline="")
 
-            print(f"  --- {name} (ждём код {expected})")
             actual = main(["compare_csv.py", str(mine_path), str(ref_path)])
-            if actual == expected:
-                print(f"  [OK]   код возврата {actual}")
-                passed += 1
-            else:
-                print(f"  [FAIL] код возврата {actual}, ждали {expected}")
-                failed += 1
+            ok = actual == expected
+            msg = f"{name} (ждём код {expected}) — код возврата {actual}"
+            results.append((ok, msg))
+    return results
+
+
+def _print_results(title: str, results: list[tuple[bool, str]]) -> tuple[int, int]:
+    print(title)
+    passed = failed = 0
+    for ok, msg in results:
+        if ok:
+            print(f"  [OK]   {msg}")
+            passed += 1
+        else:
+            print(f"  [FAIL] {msg}")
+            failed += 1
     return passed, failed
 
 
+def test_space_literals() -> None:
+    """pytest-точка входа — собирается благодаря префиксу `test_`."""
+    failed = [msg for ok, msg in _run_space_literal_cases() if not ok]
+    assert not failed, "; ".join(failed)
+
+
+def test_values() -> None:
+    failed = [msg for ok, msg in _run_value_cases() if not ok]
+    assert not failed, "; ".join(failed)
+
+
+def test_files() -> None:
+    failed = [msg for ok, msg in _run_file_cases() if not ok]
+    assert not failed, "; ".join(failed)
+
+
 def main_test() -> int:
+    """Запуск как скрипта: печатает построчный отчёт, как раньше."""
     total_passed = total_failed = 0
-    for check in (check_space_literals, check_values, check_files):
-        p, f = check()
+    for title, results in (
+        ("Пробелы-разделители разрядов:", _run_space_literal_cases()),
+        ("Сравнение значений (same_value):", _run_value_cases()),
+        ("Сквозной запуск (main на двух файлах):", _run_file_cases()),
+    ):
+        p, f = _print_results(title, results)
         total_passed += p
         total_failed += f
         print()

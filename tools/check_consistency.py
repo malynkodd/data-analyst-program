@@ -27,8 +27,13 @@ UI_LABELS = ROOT / "research" / "pbi-ui-labels.md"
 
 EM_DASH = "—"  # em dash: разделитель в заголовке дефекта и в статусе «не чинится»
 
-# Заголовок дефекта гейта: **R12 — ...** или **D1 — ...** с начала строки.
-DEFECT_HEADING = re.compile(r"^\*\*([RD]\d+) " + EM_DASH + r" ")
+# Заголовок дефекта гейта: **R12 — ...**, **D1 — ...** или **S3 — ...** с
+# начала строки. Буквы даны явным перечислением [RDS], а не общим классом
+# [A-Z]: разделы 1–2 tools-gate.md используют тот же рисунок «**<буква><N> —
+# ...**» под B1..B6 и P1..P9 для находок, сделанных до решения 27 и не
+# несущих строки 'Статус:' — общий класс задним числом потребовал бы её от
+# них и дал бы ложные [FAIL] (решение 32).
+DEFECT_HEADING = re.compile(r"^\*\*([RDS]\d+) " + EM_DASH + r" ")
 
 # Три разрешённые формы учётной строки (решение 27, часть 2). Набор
 # закрытый намеренно: свободная формулировка ломает проверку опечаткой,
@@ -616,9 +621,12 @@ def check_defect_status() -> None:
     доказательством, он является утверждением.
 
     Проверяется три вещи: заголовок дефекта не остался без статуса,
-    статус ровно один и написан по грамматике, нумерация R сплошная с 1.
-    Отрицательный пример к этой проверке прогнан при её заведении —
-    research/tools-gate.md, 5.5."""
+    статус ровно один и написан по грамматике, нумерация каждой буквенной
+    серии (R, D, S) сплошная с 1 внутри себя. Серия S заведена решением 32
+    для дефектов проверочных скриптов вне гейта Power BI (M4), который
+    единолично занимает серию R. Отрицательный пример к этой проверке
+    прогнан при её заведении — research/tools-gate.md, 5.5; отрицательный
+    пример к серии S — там же, 5.13."""
     if not TOOLS_GATE.exists():
         fail("research/tools-gate.md не найден — учёт дефектов гейта проверить нечем")
         return
@@ -682,23 +690,32 @@ def check_defect_status() -> None:
         )
         problems = True
 
-    r_numbers = sorted(int(d[1:]) for d, _, _ in bounded if d.startswith("R"))
-    expected = list(range(1, len(r_numbers) + 1))
-    if r_numbers != expected:
-        missing = sorted(set(expected) - set(r_numbers))
-        dupes = sorted({n for n in r_numbers if r_numbers.count(n) > 1})
-        fail(
-            f"research/tools-gate.md: нумерация дефектов R не сплошная — "
-            f"пропущены: {missing or 'нет'}, повторяются: {dupes or 'нет'}"
-        )
-        problems = True
+    # Нумерация проверяется отдельно по каждой букве-серии (R, D, S, ...) —
+    # не только по R, как было до решения 32: каждая серия обязана идти
+    # подряд с 1 внутри себя, независимо от других серий.
+    by_prefix: dict[str, list[int]] = {}
+    for d, _, _ in bounded:
+        by_prefix.setdefault(d[0], []).append(int(d[1:]))
+
+    for prefix in sorted(by_prefix):
+        numbers = sorted(by_prefix[prefix])
+        expected = list(range(1, len(numbers) + 1))
+        if numbers != expected:
+            missing = sorted(set(expected) - set(numbers))
+            dupes = sorted({n for n in numbers if numbers.count(n) > 1})
+            fail(
+                f"research/tools-gate.md: нумерация дефектов {prefix} не сплошная — "
+                f"пропущены: {missing or 'нет'}, повторяются: {dupes or 'нет'}"
+            )
+            problems = True
 
     if not problems:
-        ids = ", ".join(f"{n}: {c}" for n, c in counts.items())
-        ok(
-            f"research/tools-gate.md: {len(bounded)} дефектов со статусом "
-            f"(R1..R{max(r_numbers)} и D1) — {ids}"
+        series = ", ".join(
+            f"{prefix}1..{prefix}{max(numbers)}" if len(numbers) > 1 else f"{prefix}{numbers[0]}"
+            for prefix, numbers in sorted(by_prefix.items())
         )
+        ids = ", ".join(f"{n}: {c}" for n, c in counts.items())
+        ok(f"research/tools-gate.md: {len(bounded)} дефектов со статусом ({series}) — {ids}")
 
 
 def check_decision_numbering() -> None:
