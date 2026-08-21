@@ -11,6 +11,7 @@ import csv
 import fnmatch
 import re
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 
@@ -229,6 +230,60 @@ def check_step_skill_header() -> None:
         ok(
             f"program/M*/step-NN.md: все {len(steps)} шагов объявили вид — "
             f"{with_skill} с умением, {len(infra)} без; {tail}"
+        )
+
+
+# Фраза-утверждение о факте прогона — не заголовок и не пример вывода
+# скрипта, поэтому не FORBIDDEN_PHRASES, а отдельный факт-чек (решение 33).
+RUN_DATE = re.compile(r"[Пп]рогон[^\n]*?автора\s+(\d{4}-\d{2}-\d{2})")
+
+
+def _file_commit_date(path: Path) -> str | None:
+    """Дата (ГГГГ-ММ-ДД) последнего коммита, тронувшего файл. None, если
+    файл ещё не закоммичен — сравнивать заявленную дату прогона не с чем."""
+    result = subprocess.run(
+        ["git", "log", "-1", "--format=%ad", "--date=short", "--", str(path)],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    return result.stdout.strip() or None
+
+
+def check_run_dates() -> None:
+    """Дата в строке «Прогон ... на машине автора ГГГГ-ММ-ДД» обязана быть
+    датой реального события — прогон не может случиться позже коммита,
+    который принёс в репозиторий его же результат (решение 33).
+
+    Найдено внешним аудитом: `SEED` в `program/M9/data/traps_*.py`
+    (20260823…20260826, выбор датасета, не дата) и порядковый номер модуля
+    в последовательности M8→M13 были по ошибке приняты за календарные даты
+    прогона — текст утверждал дни вплоть до 2026-08-27, хотя `git log`
+    показывает один и тот же коммит-день для всех, 2026-08-20. Проверка не
+    ловит будущую ошибку того же класса без даты git — если файл ещё не
+    закоммичен, сравнивать не с чем, он пропускается."""
+    if not PROGRAM_DIR.exists():
+        return
+    problems: list[str] = []
+    checked = 0
+    for f in sorted(PROGRAM_DIR.rglob("*.md")):
+        text = f.read_text(encoding="utf-8")
+        for m in RUN_DATE.finditer(text):
+            claimed = m.group(1)
+            commit_date = _file_commit_date(f)
+            if commit_date is None:
+                continue
+            checked += 1
+            if claimed > commit_date:
+                rel = f.relative_to(ROOT).as_posix()
+                problems.append(
+                    f"{rel}: заявлен прогон {claimed}, но коммит, принёсший файл, "
+                    f"датирован {commit_date} — прогон не может быть позже своего коммита"
+                )
+    for p in problems:
+        fail(p)
+    if not problems:
+        ok(
+            f"program/**/*.md: {checked} упоминаний 'Прогон ... на машине автора' — "
+            f"ни одно не позже своего коммита"
         )
 
 
@@ -1344,6 +1399,7 @@ def main() -> int:
     check_module_hours(blueprint_text)
     check_skill_ids(blueprint_text)
     check_step_skill_header()
+    check_run_dates()
     check_decision_numbering()
     check_defect_status()
     check_calendar_covers_settled()

@@ -34,7 +34,7 @@
 
 ## 1.3. Разобранный пример на сквозном датасете
 
-Прогон на машине автора 2026-08-21.
+Прогон на машине автора 2026-08-20.
 
 ```python
 median_by_account = completed.groupby("account_id")["amount"].transform("median")
