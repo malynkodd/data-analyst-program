@@ -180,10 +180,10 @@ STEP_FILE = re.compile(r"^step-(\d+)\.md$")
 
 
 def _content_steps() -> list[Path]:
-    """Содержательные шаги: program/M*/step-NN.md с NN > 0. step-00.md —
+    """Содержательные шаги: program/[MP]*/step-NN.md с NN > 0. step-00.md —
     служебная декларация модуля, а не шаг, и строки 'Умение:' не имеет."""
     out: list[Path] = []
-    for f in sorted(PROGRAM_DIR.glob("M*/step-*.md")):
+    for f in sorted(PROGRAM_DIR.glob("[MP]*/step-*.md")):
         m = STEP_FILE.match(f.name)
         if m and int(m.group(1)) > 0:
             out.append(f)
@@ -204,7 +204,7 @@ def check_step_skill_header() -> None:
         return
     steps = _content_steps()
     if not steps:
-        ok("program/M*/step-NN.md: содержательных шагов не найдено — проверка пропущена")
+        ok("program/[MP]*/step-NN.md: содержательных шагов не найдено — проверка пропущена")
         return
 
     infra: list[str] = []
@@ -228,7 +228,7 @@ def check_step_skill_header() -> None:
     if not silent:
         tail = f"инфраструктурные: {', '.join(infra)}" if infra else "инфраструктурных нет"
         ok(
-            f"program/M*/step-NN.md: все {len(steps)} шагов объявили вид — "
+            f"program/[MP]*/step-NN.md: все {len(steps)} шагов объявили вид — "
             f"{with_skill} с умением, {len(infra)} без; {tail}"
         )
 
@@ -597,16 +597,16 @@ def check_step00(blueprint_text: str) -> None:
     if not PROGRAM_DIR.exists():
         return
     module_dirs = sorted(
-        p for p in PROGRAM_DIR.iterdir() if p.is_dir() and re.fullmatch(r"M\d+", p.name)
+        p for p in PROGRAM_DIR.iterdir() if p.is_dir() and re.fullmatch(r"[MP]\d+", p.name)
     )
     if not module_dirs:
-        ok("program/: ни один модуль ещё не начат — проверка step-00.md пропущена")
+        ok("program/: ни один модуль или проект ещё не начат — проверка step-00.md пропущена")
         return
     missing = [d.name for d in module_dirs if not (d / "step-00.md").exists()]
     if missing:
-        fail(f"модули без step-00.md: {', '.join(missing)}")
+        fail(f"модули/проекты без step-00.md: {', '.join(missing)}")
     else:
-        ok(f"все {len(module_dirs)} начатых модулей имеют step-00.md")
+        ok(f"все {len(module_dirs)} начатых модулей и проектов имеют step-00.md")
 
 
 DECISION_HEADING = re.compile(r"^## (\d+)\. ", re.MULTILINE)
@@ -633,7 +633,7 @@ def check_calendar_covers_settled() -> None:
 
     checked = 0
     problems = False
-    for cal_path in sorted(PROGRAM_DIR.glob("M*/data/*/calendar.csv")):
+    for cal_path in sorted(PROGRAM_DIR.glob("[MP]*/data/*/calendar.csv")):
         tx_path = cal_path.parent / "transactions.csv"
         if not tx_path.exists():
             continue
@@ -660,9 +660,9 @@ def check_calendar_covers_settled() -> None:
             problems = True
 
     if checked and not problems:
-        ok(f"program/M*/data/: календарь покрывает дату расчёта, сверено папок: {checked}")
+        ok(f"program/[MP]*/data/: календарь покрывает дату расчёта, сверено папок: {checked}")
     elif not checked:
-        ok("program/M*/data/: папок с calendar.csv и transactions.csv нет — датасет не собран, проверка пропущена")
+        ok("program/[MP]*/data/: папок с calendar.csv и transactions.csv нет — датасет не собран, проверка пропущена")
 
 
 def check_defect_status() -> None:
@@ -929,7 +929,7 @@ def _count_sql_table_rows(data_dir: Path, table: str, files: list[str]) -> int:
 
 
 def check_data_readme_counts() -> None:
-    """Числа, заявленные в program/M*/data/README.md (раздел «Проверка
+    """Числа, заявленные в program/[MP]*/data/README.md (раздел «Проверка
     строк»), сверяются с фактическими файлами — тот же класс ошибки, что
     рассогласование часов/умений: число один раз посчитано руками и
     разошлось с данными после правки (M3: «17 заказов» осталось в прозе
@@ -937,9 +937,9 @@ def check_data_readme_counts() -> None:
     ревью, не автоматически — отсюда эта проверка)."""
     if not PROGRAM_DIR.exists():
         return
-    readmes = sorted(PROGRAM_DIR.glob("M*/data/README.md"))
+    readmes = sorted(PROGRAM_DIR.glob("[MP]*/data/README.md"))
     if not readmes:
-        ok("program/M*/data/README.md: файлов не найдено — проверка пропущена")
+        ok("program/[MP]*/data/README.md: файлов не найдено — проверка пропущена")
         return
 
     checked = 0
@@ -973,9 +973,9 @@ def check_data_readme_counts() -> None:
                 fail(f"{label}: README заявляет {expected} строк, фактически {actual}")
 
     if checked:
-        ok(f"program/M*/data/README.md: сверено {checked} строк из раздела «Проверка строк» во всех {len(readmes)} файлах")
+        ok(f"program/[MP]*/data/README.md: сверено {checked} строк из раздела «Проверка строк» во всех {len(readmes)} файлах")
     else:
-        ok(f"program/M*/data/README.md: найдено {len(readmes)} файлов, ни один не содержит раздел «Проверка строк»")
+        ok(f"program/[MP]*/data/README.md: найдено {len(readmes)} файлов, ни один не содержит раздел «Проверка строк»")
 
 
 LOAD_ORDER_HEADING = "## Порядок загрузки"
@@ -996,7 +996,7 @@ UNCOVERED = (
 
 
 def _parse_load_order(readme_text: str) -> dict[str, list[str]] | None:
-    """Таблица «Порядок загрузки» из program/M*/data/README.md:
+    """Таблица «Порядок загрузки» из program/[MP]*/data/README.md:
     `<шаг> | <что появляется> | <файлы>`. Возвращает {шаг: [.sql-файлы]}.
     Не-.sql в третьей колонке (генератор activity_log) отбрасывается — он
     создаёт таблицу сам, в накопительную сборку базы не входит."""
@@ -1063,7 +1063,7 @@ def check_reference_csv_state() -> None:
     """Эталонный CSV шага сверяется с результатом эталонного запроса,
     выполненного на том состоянии базы, которое будет у учащегося именно на
     этом шаге — накопительно по таблице «Порядок загрузки» из
-    program/M*/data/README.md.
+    program/[MP]*/data/README.md.
 
     Ловит ровно один класс дефекта: эталон посчитан на другом состоянии
     базы, чем то, до которого учащийся дойдёт по инструкциям шагов.
@@ -1087,7 +1087,7 @@ def check_reference_csv_state() -> None:
         local_fails.append(msg)
         fail(msg)
 
-    data_dirs = sorted(PROGRAM_DIR.glob("M*/data"))
+    data_dirs = sorted(PROGRAM_DIR.glob("[MP]*/data"))
     checked = 0
     modules_with_markers: list[str] = []
     skipped_modules: list[str] = []
@@ -1227,7 +1227,7 @@ def _matches_gitignore(rel_path: Path, patterns: list[str]) -> bool:
 
 
 def check_data_dir_no_stray_files() -> None:
-    """Файлы в program/M*/data/, не упомянутые ни в README.md той же папки,
+    """Файлы в program/[MP]*/data/, не упомянутые ни в README.md той же папки,
     ни покрытые .gitignore, — вероятный случайный артефакт: например, файл
     с именем `--help`, который sqlite3.connect создаёт молча, если аргумент
     argparse не распознан как флаг и попадает в позиционный путь к базе
@@ -1237,9 +1237,9 @@ def check_data_dir_no_stray_files() -> None:
     (таблица «Файлы»)."""
     if not PROGRAM_DIR.exists():
         return
-    data_dirs = sorted(PROGRAM_DIR.glob("M*/data"))
+    data_dirs = sorted(PROGRAM_DIR.glob("[MP]*/data"))
     if not data_dirs:
-        ok("program/M*/data/: директорий не найдено — проверка на мусор пропущена")
+        ok("program/[MP]*/data/: директорий не найдено — проверка на мусор пропущена")
         return
 
     patterns = _load_gitignore_patterns()
@@ -1263,7 +1263,7 @@ def check_data_dir_no_stray_files() -> None:
         for rel in stray:
             fail(f"{rel}: не упомянут в README.md своей папки и не покрыт .gitignore — похоже на случайный артефакт")
     else:
-        ok(f"program/M*/data/: проверено {checked} файлов в {len(data_dirs)} папках, ни одного не покрытого README/.gitignore не найдено")
+        ok(f"program/[MP]*/data/: проверено {checked} файлов в {len(data_dirs)} папках, ни одного не покрытого README/.gitignore не найдено")
 
 
 CODE_FENCE = re.compile(r"```.*?\n(.*?)```", re.DOTALL)
