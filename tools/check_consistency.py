@@ -593,11 +593,30 @@ def check_skill_ids(blueprint_text: str) -> None:
         ok(f"все {len(all_ids)} умений закрыты шапкой 'Умение:' хотя бы одного шага program/")
 
 
+def _has_tracked_content(rel_dir: Path) -> bool:
+    """«Начат» значит есть хотя бы один файл, видимый git (закоммиченный
+    или untracked-но-не-в-.gitignore) — сырой датасет автора в
+    gitignored data/raw/ (P4: uo.zip до написания step-00.md, решение 36)
+    не считается началом работы над модулем/проектом."""
+    tracked = subprocess.run(
+        ["git", "ls-files", str(rel_dir)],
+        cwd=ROOT, capture_output=True, text=True,
+    ).stdout.strip()
+    if tracked:
+        return True
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard", str(rel_dir)],
+        cwd=ROOT, capture_output=True, text=True,
+    ).stdout.strip()
+    return bool(untracked)
+
+
 def check_step00(blueprint_text: str) -> None:
     if not PROGRAM_DIR.exists():
         return
     module_dirs = sorted(
         p for p in PROGRAM_DIR.iterdir() if p.is_dir() and re.fullmatch(r"[MP]\d+", p.name)
+        and _has_tracked_content(p.relative_to(ROOT))
     )
     if not module_dirs:
         ok("program/: ни один модуль или проект ещё не начат — проверка step-00.md пропущена")
