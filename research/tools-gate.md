@@ -3393,4 +3393,4 @@ git — и внёс `P4` в список без `step-00.md`, хотя с точ
 
 Затронуто: `tools/check_consistency.py`, функция `check_step00()`.
 
-Статус: открыт
+Статус: закрыт 2026-08-22, 947cc3d, tools/check_consistency.py
