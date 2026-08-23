@@ -428,6 +428,7 @@ def api_session(action: str):
             theme=data.get("theme") or f"{module}.{number:02d} {st.title}",
             plan=data.get("plan") or repo.plan_hours(st.header),
             fact_seconds=float(closed.get("seconds", 0.0)),
+            fact_tasks=data.get("fact_tasks"),
             stuck=data.get("stuck"),
             useless=data.get("useless"),
             notes=closed.get("notes", []),

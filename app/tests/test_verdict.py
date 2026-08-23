@@ -85,8 +85,11 @@ def test_verdict_is_always_marked_as_ai_not_script() -> None:
 
 
 def test_journal_note_names_the_channel_and_the_kind() -> None:
+    # Решение 45: вердикт по уже написанному ответу — самопроверка, а не
+    # «текста шага не хватило». Пометки разные, и считаются они отдельно.
     note = assistant.note_for_verdict("задание 13", "не сошлось")
-    assert note.startswith("[сторона]")          # формат правила 6 self.md
+    assert note.startswith("[проверка]")
+    assert not note.startswith("[сторона]")
     assert "не скрипт" in note
     assert "не сошлось" in note
 

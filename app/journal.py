@@ -1,8 +1,9 @@
 """Дозапись строки сессии в `research/self.md`.
 
 Формат берётся из самого файла — его шапка объявляет
-`Дата | Тема | План (ч) | Факт (ч) | Где застрял | Что оказалось лишним`,
-и приложение пишет ровно эти шесть полей. Единственная операция с файлом —
+`Дата | Тема | План (ч) | Факт (ч) | Факт: задания (ч) | Где застрял |
+Что оказалось лишним`, и приложение пишет ровно эти семь полей.
+Единственная операция с файлом —
 добавление строки в конец: существующие строки не читаются на предмет
 правки, не перенумеровываются и не переформатируются
 (`app/PLAN.md`, раздел 4; тест `tests/test_journal.py`).
@@ -10,6 +11,13 @@
 Часы приложение не придумывает: «План» — дословно из шапки `Время:` шага
 (`repo.plan_hours`), «Факт» — из таймера сессии (`state.py`), округлённый
 вниз до 0.25 ч по правилу 1 самого файла.
+
+«Факт: задания» таймером не измеряется и не выводится из него: приложение
+не знает, читал человек теорию или правил свой код. Число вводится
+автором в форме завершения сессии и не может превышать «Факт» — правило
+1a файла называет его частью факта, а не добавкой. Колонка добавлена
+2026-08-24 (решение 44); строки из шести полей — записи до этой даты,
+`records()` читает их как есть и «Факт: задания» им не приписывает.
 """
 
 from __future__ import annotations
@@ -53,11 +61,40 @@ def _cell(value: str | None) -> str:
     return text or EMPTY
 
 
+def clamp_tasks(value: str | None, fact: str) -> str | None:
+    """«Факт: задания» как число, не больше «Факта». Иначе — None.
+
+    Правило 1a `research/self.md`: задания — часть факта. Значение больше
+    факта означает описку, и записывать её нельзя: калибровка вилок
+    считает по этой колонке. Нечисловой ввод отбрасывается так же молча —
+    поле необязательное, пустое поле законно.
+    """
+    if value is None:
+        return None
+    text = str(value).strip().replace(",", ".")
+    if not text:
+        return None
+    try:
+        hours_value = float(text)
+    except ValueError:
+        return None
+    if hours_value < 0:
+        return None
+    try:
+        limit = float(fact)
+    except (TypeError, ValueError):
+        limit = None
+    if limit is not None and hours_value > limit:
+        hours_value = limit
+    return format_hours(hours_value)
+
+
 def compose_row(
     *,
     theme: str,
     plan: str,
     fact: str,
+    fact_tasks: str | None = None,
     stuck: str | None = None,
     useless: str | None = None,
     notes: list[str] | None = None,
@@ -69,6 +106,9 @@ def compose_row(
     сессию. Они идут в начало поля «Где застрял», по одной, перед текстом
     автора: правило требует отдельной пометки на каждое обращение, а не
     сводки.
+
+    `fact_tasks` — правило 1a: часть факта, ушедшая на задания. Пустое
+    поле пишется как «—»: пропуск законен, выдумывать число нельзя.
     """
     day = day or _date.today()
     parts = [_cell(n) for n in (notes or [])]
@@ -81,6 +121,7 @@ def compose_row(
             _cell(theme),
             _cell(plan),
             _cell(fact),
+            _cell(clamp_tasks(fact_tasks, fact)),
             stuck_cell,
             _cell(useless),
         ]
@@ -106,6 +147,7 @@ def append_session(
     theme: str,
     plan: str,
     fact_seconds: float,
+    fact_tasks: str | None = None,
     stuck: str | None = None,
     useless: str | None = None,
     notes: list[str] | None = None,
@@ -116,6 +158,7 @@ def append_session(
         theme=theme,
         plan=plan,
         fact=format_hours(floor_quarter(fact_seconds)),
+        fact_tasks=fact_tasks,
         stuck=stuck,
         useless=useless,
         notes=notes,
@@ -137,9 +180,13 @@ def records(path: Path | None = None) -> list[dict]:
     """Строки раздела «Записи» — только чтение, для экрана журнала.
 
     Разбор нужен, чтобы показать план против факта; сам файл при этом не
-    меняется и не переписывается. Строка, не разбирающаяся на шесть полей,
-    отдаётся как есть — файл ведёт человек, и приложение не вправе решать,
-    что его запись неправильная.
+    меняется и не переписывается. Строка, не разбирающаяся ни на семь, ни
+    на шесть полей, отдаётся как есть — файл ведёт человек, и приложение
+    не вправе решать, что его запись неправильная.
+
+    Шесть полей — формат до решения 44 (2026-08-24). Такие строки читаются
+    без «Факт: задания»: приписать им число задним числом нельзя, его
+    никто не мерил.
     """
     target = path or SELF_MD
     text = target.read_text(encoding="utf-8")
@@ -152,7 +199,12 @@ def records(path: Path | None = None) -> list[dict]:
         if not line or line.startswith("#"):
             continue
         parts = [p.strip() for p in line.split("|")]
-        if len(parts) != 6:
+        if len(parts) == 7:
+            fact_tasks, stuck, useless = parts[4], parts[5], parts[6]
+        elif len(parts) == 6:
+            # Формат до решения 44: колонки «Факт: задания» в строке нет.
+            fact_tasks, stuck, useless = EMPTY, parts[4], parts[5]
+        else:
             out.append({"raw": line, "parsed": False})
             continue
         out.append(
@@ -163,9 +215,11 @@ def records(path: Path | None = None) -> list[dict]:
                 "theme": parts[1],
                 "plan": parts[2],
                 "fact": parts[3],
-                "stuck": parts[4],
-                "useless": parts[5],
-                "notes": parts[4].count("[сторона]"),
+                "fact_tasks": fact_tasks,
+                "stuck": stuck,
+                "useless": useless,
+                "notes": stuck.count("[сторона]"),
+                "checks": stuck.count("[проверка]"),
             }
         )
     return out

@@ -427,7 +427,12 @@ CALIBRATION_CLAIM = re.compile(r"(\d+) из (\d+) часовых\s+оценок 
 CALIBRATION_MARK = "**Требуется**"
 
 
-def check_calibration_count(blueprint_text: str) -> None:
+CALIBRATION_CLAIM_CLAUDE = re.compile(
+    r"(\d+) из (\d+) часовых вилок части\s+6\.1"
+)
+
+
+def check_calibration_count(blueprint_text: str, claude_text: str) -> None:
     """Заявление части 7 blueprint «N из M часовых оценок помечены как
     требующие калибровки» против построчного подсчёта в таблице 6.1.
 
@@ -473,6 +478,180 @@ def check_calibration_count(blueprint_text: str) -> None:
             f"калибровки», а подсчёт пометок '{CALIBRATION_MARK}' в таблице 6.1 "
             f"даёт {marked} из {total}"
         )
+
+    # Третье место, где живёт то же число. Дописано решением 42 (2026-08-24)
+    # после внешнего аудита: часть 7 сверялась с 2026-08-23, а CLAUDE.md — нет,
+    # и решение 41 оставило там «17 из 24» при фактических 19.
+    m = CALIBRATION_CLAIM_CLAUDE.search(claude_text)
+    if not m:
+        fail(
+            "CLAUDE.md: не найдено утверждение «N из M часовых вилок части 6.1» — "
+            "сверять подсчёт не с чем"
+        )
+        return
+    c_claimed, c_total = int(m.group(1)), int(m.group(2))
+    if (c_claimed, c_total) == (marked, total):
+        ok(f"CLAUDE.md: «{c_claimed} из {c_total} вилок требуют калибровки» совпадает с таблицей 6.1")
+    else:
+        fail(
+            f"CLAUDE.md заявляет «{c_claimed} из {c_total} часовых вилок требуют "
+            f"калибровки», а подсчёт пометок '{CALIBRATION_MARK}' в таблице 6.1 "
+            f"даёт {marked} из {total}"
+        )
+
+
+PROSE_CORE = re.compile(rf"ядро \(([^)]+)\) = (\d+){DASH}(\d+) ч")
+PROSE_REST = re.compile(
+    rf"обвязка\s+\((\d+){DASH}(\d+)\),\s+портфолио\s+\((\d+){DASH}(\d+)\)\s+"
+    rf"и\s+сборка артефактов\s+\((\d+){DASH}(\d+)\)"
+)
+PROSE_TOTAL_61 = re.compile(
+    rf"Официальный итог программы — сумма этой таблицы, (\d+){DASH}(\d+) ч"
+)
+PROSE_TOTAL_62 = re.compile(
+    rf"Официальный итог — (\d+){DASH}(\d+), построчная сумма части 6\.1"
+)
+PROSE_STAGE_SUM = re.compile(
+    rf"Построчная сумма шести вилок этапа этой таблицы — (\d+){DASH}(\d+)"
+)
+
+
+def _rows_61(blueprint_text: str) -> list[tuple[str, int, int]]:
+    """Строки таблицы 6.1 как (подпись, низ, верх). Подпись — первая ячейка."""
+    part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
+    out: list[tuple[str, int, int]] = []
+    for line in part61.splitlines():
+        if not line.startswith("|") or re.match(r"^\|[\s:\-|]+\|?$", line):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        rng = parse_range(cells[1])
+        if rng is None:
+            continue
+        out.append((cells[0], rng[0], rng[1]))
+    return out
+
+
+def check_part61_prose(blueprint_text: str) -> None:
+    """Четыре числа в абзаце «Сверка с CLAUDE.md» под таблицей 6.1 и два числа
+    в прозе 6.2 — против построчной суммы самой таблицы.
+
+    Заведено решением 42 (2026-08-24) по факту внешнего аудита. Таблицу 6.1
+    и строку CLAUDE.md скрипт разбирал с Фазы 1, а абзац под таблицей — нет,
+    и после решения 41 там четырьмя числами подряд стояла редакция до решения
+    41 (ядро 201–270, обвязка 110–137, сборка 8–10, итог 427–554) при
+    фактических 212–276 / 114–142 / 8–11 / 442–565. Абзац при этом заявлял,
+    что числа получены разбором таблицы скриптом. Тот же класс ошибки, что
+    480–644 (решение 16) и «14 из 24» (Фаза 4): число живёт в прозе рядом с
+    таблицей и не читается ничем."""
+    rows = _rows_61(blueprint_text)
+    if not rows:
+        fail("6.1: таблица часов не распарсилась — прозу сверять не с чем")
+        return
+
+    part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
+    m = PROSE_CORE.search(part61)
+    if not m:
+        fail("6.1, абзац «Сверка с CLAUDE.md»: не найдено «ядро (...) = N–M ч»")
+        return
+
+    core_names = [n.strip() for n in m.group(1).split(",")]
+    core_low = core_high = 0
+    core_hit: list[str] = []
+    for label, low, high in rows:
+        code = label.split()[0] if label.split() else ""
+        if code in core_names:
+            core_low += low
+            core_high += high
+            core_hit.append(code)
+    missing = [n for n in core_names if n not in core_hit]
+    if missing:
+        fail(f"6.1: модули ядра из прозы не найдены в таблице: {', '.join(missing)}")
+        return
+    if (int(m.group(2)), int(m.group(3))) != (core_low, core_high):
+        fail(
+            f"6.1, проза: ядро заявлено {m.group(2)}{DASH}{m.group(3)}, "
+            f"а сумма строк {', '.join(core_hit)} даёт {core_low}{DASH}{core_high}"
+        )
+    else:
+        ok(f"6.1, проза: ядро {core_low}{DASH}{core_high} совпадает с суммой своих строк")
+
+    portfolio = [r for r in rows if re.fullmatch(r"P\d", r[0].split()[0] if r[0].split() else "")]
+    career = [r for r in rows if CAREER_ROW_MARK in r[0]]
+    p_low, p_high = sum(r[1] for r in portfolio), sum(r[2] for r in portfolio)
+    c_low, c_high = sum(r[1] for r in career), sum(r[2] for r in career)
+    t_low, t_high = sum(r[1] for r in rows), sum(r[2] for r in rows)
+    o_low, o_high = t_low - core_low - p_low - c_low, t_high - core_high - p_high - c_high
+
+    m = PROSE_REST.search(part61)
+    if not m:
+        fail(
+            "6.1, абзац «Сверка с CLAUDE.md»: не найдено "
+            "«обвязка (N–M), портфолио (N–M) и сборка артефактов (N–M)»"
+        )
+    else:
+        got = tuple(int(g) for g in m.groups())
+        want = (o_low, o_high, p_low, p_high, c_low, c_high)
+        if got != want:
+            fail(
+                f"6.1, проза: обвязка/портфолио/сборка заявлены "
+                f"{got[0]}{DASH}{got[1]} / {got[2]}{DASH}{got[3]} / {got[4]}{DASH}{got[5]}, "
+                f"а таблица даёт {want[0]}{DASH}{want[1]} / {want[2]}{DASH}{want[3]} / "
+                f"{want[4]}{DASH}{want[5]}"
+            )
+        else:
+            ok(
+                f"6.1, проза: обвязка {o_low}{DASH}{o_high}, портфолио {p_low}{DASH}{p_high}, "
+                f"сборка {c_low}{DASH}{c_high} — совпадают с таблицей"
+            )
+
+    m = PROSE_TOTAL_61.search(part61)
+    if not m:
+        fail("6.1, проза: не найдено «Официальный итог программы — сумма этой таблицы, N–M ч»")
+    elif (int(m.group(1)), int(m.group(2))) != (t_low, t_high):
+        fail(
+            f"6.1, проза: официальный итог заявлен {m.group(1)}{DASH}{m.group(2)}, "
+            f"а построчная сумма таблицы — {t_low}{DASH}{t_high}"
+        )
+    else:
+        ok(f"6.1, проза: официальный итог {t_low}{DASH}{t_high} совпадает с суммой таблицы")
+
+    part62 = section(blueprint_text, "## 6.2.", "## 6.3.")
+    stage_low = stage_high = 0
+    for line in part62.splitlines():
+        if not line.startswith("|") or re.match(r"^\|[\s:\-|]+\|?$", line):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 3 or "Итого" in cells[0]:
+            continue
+        rng = parse_range(cells[2])
+        if rng is None:
+            continue
+        stage_low += rng[0]
+        stage_high += rng[1]
+
+    m = PROSE_STAGE_SUM.search(part62)
+    if not m:
+        fail("6.2, проза: не найдено «Построчная сумма шести вилок этапа этой таблицы — N–M»")
+    elif (int(m.group(1)), int(m.group(2))) != (stage_low, stage_high):
+        fail(
+            f"6.2, проза: сумма вилок этапов заявлена {m.group(1)}{DASH}{m.group(2)}, "
+            f"а построчный подсчёт даёт {stage_low}{DASH}{stage_high}"
+        )
+    else:
+        ok(f"6.2, проза: сумма вилок этапов {stage_low}{DASH}{stage_high} совпадает с подсчётом")
+
+    m = PROSE_TOTAL_62.search(part62)
+    if not m:
+        fail("6.2, проза: не найдено «Официальный итог — N–M, построчная сумма части 6.1»")
+    elif (int(m.group(1)), int(m.group(2))) != (t_low, t_high):
+        fail(
+            f"6.2, проза: официальный итог заявлен {m.group(1)}{DASH}{m.group(2)}, "
+            f"а часть 6.1 суммируется в {t_low}{DASH}{t_high}"
+        )
+    else:
+        ok(f"6.2, проза: официальный итог {t_low}{DASH}{t_high} совпадает с частью 6.1")
 
 
 CAREER_DIR_NAME = "career"
@@ -1567,7 +1746,8 @@ def main() -> int:
     check_part2_hours(blueprint_text)
     check_module_hours(blueprint_text)
     check_career_hours(blueprint_text)
-    check_calibration_count(blueprint_text)
+    check_part61_prose(blueprint_text)
+    check_calibration_count(blueprint_text, claude_text)
     check_skill_ids(blueprint_text)
     check_step_skill_header()
     check_run_dates()

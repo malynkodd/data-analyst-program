@@ -280,12 +280,13 @@ async function openJournal() {
 
   $("journal-records").innerHTML = real.length
     ? `<table class="journal">
-        <tr><th>Дата</th><th>Тема</th><th>План</th><th>Факт</th><th>Где застрял</th><th>Что оказалось лишним</th></tr>
+        <tr><th>Дата</th><th>Тема</th><th>План</th><th>Факт</th><th>Из них задания</th><th>Где застрял</th><th>Что оказалось лишним</th></tr>
         ${d.records.map((r) => r.parsed
           ? `<tr><td class="num">${esc(r.date)}</td><td>${esc(r.theme)}</td>
              <td class="num">${esc(r.plan)}</td><td class="num">${esc(r.fact)}</td>
+             <td class="num">${esc(r.fact_tasks)}</td>
              <td>${esc(r.stuck)}</td><td>${esc(r.useless)}</td></tr>`
-          : `<tr><td colspan="6"><code>${esc(r.raw)}</code></td></tr>`).join("")}
+          : `<tr><td colspan="7"><code>${esc(r.raw)}</code></td></tr>`).join("")}
       </table>`
     : '<p class="hint">Записей пока нет. Первая появится, когда вы закроете первый шаг.</p>';
 }
@@ -586,11 +587,13 @@ $("btn-write").onclick = async () => {
       step_id: current.step_id,
       theme: $("f-theme").value,
       plan: $("f-plan").value,
+      fact_tasks: $("f-tasks").value,
       stuck: $("f-stuck").value,
       useless: $("f-useless").value,
     });
     $("journal-tail").hidden = false;
     $("journal-tail").textContent = "Записано в research/self.md:\n\n" + r.tail.join("\n");
+    $("f-tasks").value = "";
     $("f-stuck").value = "";
     $("f-useless").value = "";
     applyState(r.state);
