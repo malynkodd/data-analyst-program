@@ -654,6 +654,94 @@ def check_part61_prose(blueprint_text: str) -> None:
         ok(f"6.2, проза: официальный итог {t_low}{DASH}{t_high} совпадает с частью 6.1")
 
 
+PRACTICE_LABEL = {
+    "M0": "M0", "M1": "M1", "M13": "M13", "M2": "M2", "M3": "M3", "M10": "M10",
+    "M4": "M4", "M15": "M15", "M16": "M16", "M12": "M12", "M5": "M5", "M6": "M6",
+    "M7": "M7", "M8": "M8", "M9": "M9", "M11": "M11", "M14": "M14",
+    "career": "Блок «Выход»",
+}
+
+
+def check_practice_volume(blueprint_text: str) -> None:
+    """Таблица 6.5 «Объём практики» против пересчёта файлов.
+
+    Заведено решением 47 (2026-08-24). Метрика взята у Karpov [К, 3.4, п. 9]:
+    задания измеряют сделанное, часы — потраченное. Число заданий, в отличие
+    от часов, проверяется без прохождения — значит, обязано проверяться, а не
+    лежать в тексте на честном слове (то же правило, что решение 42)."""
+    try:
+        from count_tasks import ORDER, tasks_in  # соседний модуль в tools/
+    except ImportError:
+        fail("6.5: не удалось импортировать tools/count_tasks.py — пересчитать нечем")
+        return
+
+    counted: dict[str, tuple[int, int]] = {}
+    for path in sorted(PROGRAM_DIR.glob("*/step-[0-9][0-9].md")):
+        if path.name == "step-00.md":
+            continue
+        n, _ = tasks_in(path)
+        steps, tasks = counted.get(path.parent.name, (0, 0))
+        counted[path.parent.name] = (steps + 1, tasks + n)
+
+    part65 = section(blueprint_text, "## 6.5.", "# ЧАСТЬ 7.")
+    if not part65.strip():
+        fail("blueprint: раздел 6.5 «Объём практики» не найден")
+        return
+
+    declared: dict[str, tuple[int, int]] = {}
+    total_row: tuple[int, int] | None = None
+    for line in part65.splitlines():
+        if not line.startswith("|") or re.match(r"^\|[\s:\-|]+\|?$", line):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) != 3:
+            continue
+        nums = [c.strip("* ") for c in cells[1:]]
+        if not all(n.isdigit() for n in nums):
+            continue
+        if "Итого" in cells[0]:
+            total_row = (int(nums[0]), int(nums[1]))
+            continue
+        code = cells[0].split()[0] if cells[0].split() else ""
+        key = code if code in counted else next(
+            (k for k, label in PRACTICE_LABEL.items() if label in cells[0]), None
+        )
+        if key:
+            declared[key] = (int(nums[0]), int(nums[1]))
+
+    problems = []
+    for key, (steps, tasks) in sorted(counted.items()):
+        if key not in declared:
+            problems.append(f"{key}: строки в 6.5 нет (по файлам {steps} шагов, {tasks} заданий)")
+        elif declared[key] != (steps, tasks):
+            d_steps, d_tasks = declared[key]
+            problems.append(
+                f"{key}: 6.5 заявляет {d_steps} шагов / {d_tasks} заданий, "
+                f"файлы дают {steps} / {tasks}"
+            )
+    extra = sorted(set(declared) - set(counted))
+    problems += [f"{k}: строка в 6.5 есть, каталога нет" for k in extra]
+
+    t_steps = sum(s for s, _ in counted.values())
+    t_tasks = sum(t for _, t in counted.values())
+    if total_row is None:
+        problems.append("строка «Итого» в таблице 6.5 не найдена")
+    elif total_row != (t_steps, t_tasks):
+        problems.append(
+            f"«Итого» в 6.5 — {total_row[0]} / {total_row[1]}, "
+            f"пересчёт даёт {t_steps} / {t_tasks}"
+        )
+
+    if problems:
+        for p in problems:
+            fail(f"6.5 объём практики: {p}")
+    else:
+        ok(
+            f"6.5 объём практики: {t_steps} шагов и {t_tasks} заданий — "
+            f"таблица совпадает с пересчётом по {len(counted)} каталогам"
+        )
+
+
 CAREER_DIR_NAME = "career"
 CAREER_ROW_MARK = "Сборка резюме"
 
@@ -1747,6 +1835,7 @@ def main() -> int:
     check_module_hours(blueprint_text)
     check_career_hours(blueprint_text)
     check_part61_prose(blueprint_text)
+    check_practice_volume(blueprint_text)
     check_calibration_count(blueprint_text, claude_text)
     check_skill_ids(blueprint_text)
     check_step_skill_header()
