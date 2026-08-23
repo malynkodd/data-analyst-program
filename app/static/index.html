@@ -2,74 +2,186 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Analyst Program — прохождение</title>
 <link rel="stylesheet" href="/pygments.css">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
+<header id="top">
+  <div class="brand" id="brand" title="вернуться на стартовый экран">
+    <b>Data Analyst Program</b>
+    <span class="sub">от нуля до первой оплачиваемой работы аналитиком</span>
+  </div>
+  <div class="top-right">
+    <div class="progress" title="закрытых шагов из содержательных">
+      <div class="bar"><i id="top-bar"></i></div>
+      <span id="top-count">…</span>
+    </div>
+    <button id="btn-help" class="ghost">Как пользоваться</button>
+  </div>
+</header>
+
 <aside id="tree">
-  <h1>Программа</h1>
-  <div id="tree-body">загрузка…</div>
+  <div class="tree-head">
+    <input id="tree-filter" placeholder="Поиск по шагам…">
+  </div>
+  <div id="tree-body" class="loading">загрузка…</div>
+  <p class="legend">
+    <span class="badge">▣</span> есть проверка скриптом &nbsp;
+    <span class="badge">△</span> нужен ручной прогон
+  </p>
 </aside>
 
 <main id="step">
-  <div id="step-empty">Выберите шаг слева.</div>
 
-  <div id="step-body" hidden>
-    <div id="deferred"></div>
+  <!-- ЭКРАН ПРИ ЗАПУСКЕ -->
+  <section id="home">
+    <h1>С чего начать</h1>
+    <p class="lead">
+      Программа — это 73 шага, разложенные по шести этапам. Каждый шаг устроен
+      одинаково: немного теории, разобранный пример, задание, которое вы делаете
+      руками, и проверка — как убедиться, что получилось.
+      Слева — все шаги в том порядке, в котором их надо проходить.
+    </p>
 
-    <header id="step-head">
-      <h2 id="step-title"></h2>
-      <div id="step-meta"></div>
-    </header>
+    <div id="home-next" class="next-card"></div>
 
-    <section class="panel" id="session">
-      <div class="row">
-        <button id="btn-start">Начал</button>
-        <button id="btn-pause" hidden>Пауза</button>
-        <button id="btn-finish" hidden>Закончил</button>
-        <button id="btn-reopen" hidden>Снять отметку</button>
-        <span id="timer">00:00:00</span>
-        <span id="session-status"></span>
+    <h2>Как устроен один шаг</h2>
+    <ol class="how">
+      <li><b>Нажимаете «Начал»</b> — пойдёт таймер. Он нужен не для контроля:
+        программа не знает, сколько на самом деле занимают её шаги, и ваше
+        время — единственный способ это выяснить.</li>
+      <li><b>Читаете разделы 1.1–1.3</b> — зачем шаг, минимум теории, разбор
+        примера на данных программы.</li>
+      <li><b>Делаете задание (1.4)</b> — это главная часть. Не читать, а делать.</li>
+      <li><b>Проверяете себя (1.5)</b> — где есть скрипт, кнопка «Проверить»
+        запускает его и показывает <code>[OK]</code> или <code>[FAIL]</code>.
+        Где скрипта нет — ассистент сверит ваш письменный ответ с критерием.</li>
+      <li><b>Нажимаете «Закончил»</b> — приложение допишет строку в журнал
+        <code>research/self.md</code>: сколько заняло по плану, сколько на самом
+        деле, где застряли.</li>
+    </ol>
+
+    <h2>Три вещи, которые стоит знать сразу</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>Застряли — спросите справа</h3>
+        <p>Ассистент видит текст открытого шага. Каждый вопрос попадёт в журнал
+          пометкой <code>[сторона]</code> — это не наказание, а измерение:
+          если вопросов на шаг больше одного, значит теории в шаге не хватает
+          и её надо дописать.</p>
       </div>
-      <div id="finish-form" hidden>
-        <label>Тема <input id="f-theme"></label>
-        <label>План (ч) <input id="f-plan" readonly></label>
-        <label>Факт (ч) <input id="f-fact" readonly></label>
-        <label>Где застрял <textarea id="f-stuck" rows="2"></textarea></label>
-        <label>Что оказалось лишним <textarea id="f-useless" rows="2"></textarea></label>
-        <div id="f-notes"></div>
-        <button id="btn-write">Записать в research/self.md</button>
+      <div class="card">
+        <h3>Скрипт и ИИ — разные вещи</h3>
+        <p>Зелёная плашка «результат скрипта» означает проверенный факт: файл
+          сошёлся с эталоном. Жёлтая «вердикт ИИ» означает, что ассистент
+          прочитал ваш ответ и сравнил с критерием. Второе слабее первого.</p>
+      </div>
+      <div class="card">
+        <h3>Часы — честные</h3>
+        <p>В шаге написано «6–8 ч» — значит, это и займёт. Пауза
+          останавливает таймер: перерывы в счёт не идут.</p>
+      </div>
+    </div>
+
+    <div id="home-stages"></div>
+  </section>
+
+  <!-- ЭКРАН ШАГА -->
+  <section id="step-body" hidden>
+    <nav class="crumbs" id="crumbs"></nav>
+    <h1 id="step-title"></h1>
+    <div id="step-chips" class="chips"></div>
+    <div id="deferred"></div>
+    <div id="preamble" class="preamble"></div>
+
+    <div class="action-bar" id="session">
+      <div class="left">
+        <button id="btn-start" class="primary">Начал</button>
+        <button id="btn-pause" hidden>Пауза</button>
+        <button id="btn-finish" hidden class="primary">Закончил</button>
+        <button id="btn-reopen" hidden class="ghost">Пройти заново</button>
+      </div>
+      <div class="right">
+        <span id="timer">0:00:00</span>
+        <span id="session-status" class="pill"></span>
+      </div>
+    </div>
+    <p class="hint" id="session-hint"></p>
+
+    <div id="finish-form" hidden class="panel">
+      <h3>Закрыть сессию и записать в журнал</h3>
+      <p class="hint">Строка уйдёт в <code>research/self.md</code>. Часы приложение
+        не придумывает: план взят из шага, факт — с таймера, вниз до 0.25 ч.</p>
+      <div class="grid2">
+        <label>Тема<input id="f-theme"></label>
+        <div class="grid2 tight">
+          <label>План (ч)<input id="f-plan" readonly></label>
+          <label>Факт (ч)<input id="f-fact" readonly></label>
+        </div>
+      </div>
+      <label>Где застряли — конкретное место, а не «было сложно»
+        <textarea id="f-stuck" rows="2" placeholder="например: 40 мин искал, почему параметр не подхватился в пятом запросе"></textarea></label>
+      <label>Что оказалось лишним — самая ценная колонка журнала
+        <textarea id="f-useless" rows="2" placeholder="например: повторная генерация датасета, хватило бы одной"></textarea></label>
+      <div id="f-notes"></div>
+      <div class="row">
+        <button id="btn-write" class="primary">Записать в журнал</button>
         <button id="btn-cancel" class="ghost">Отмена</button>
       </div>
-      <pre id="journal-tail" hidden></pre>
-    </section>
+    </div>
+    <pre id="journal-tail" hidden></pre>
 
-    <section class="panel" id="checks"></section>
+    <nav id="toc" class="toc"></nav>
+    <div id="sections"></div>
 
-    <section class="panel" id="verdict-panel">
-      <h3>Письменный ответ — проверка ИИ по критерию</h3>
-      <p class="hint">Механической проверки здесь нет: ассистент сверяет ответ
-        с разделами 1.5 и 1.6 этого же файла. Это <b>не</b> результат скрипта.</p>
-      <label>Что проверяем <input id="v-task" placeholder="например: задание 13"></label>
-      <textarea id="v-answer" rows="5" placeholder="ваш письменный ответ"></textarea>
-      <button id="btn-verdict">Проверить ИИ по критерию</button>
-      <div id="verdict-out"></div>
-    </section>
-
-    <article id="step-html"></article>
-  </div>
+    <nav class="step-nav" id="step-nav"></nav>
+  </section>
 </main>
 
 <aside id="chat">
   <h3>Ассистент</h3>
-  <p class="hint">Каждое обращение — пометка <code>[сторона]</code> в строку
-    сессии <code>research/self.md</code> (правило 6, решение 40).</p>
+  <p class="hint" id="chat-hint">Видит текст открытого шага. Спрашивайте то,
+    чего в шаге не хватило.</p>
+  <div id="chat-suggest"></div>
   <div id="chat-log"></div>
-  <textarea id="chat-input" rows="3" placeholder="вопрос по шагу"></textarea>
-  <button id="btn-ask">Спросить</button>
+  <div class="chat-input">
+    <textarea id="chat-input" rows="3" placeholder="Например: что такое параметр запроса простыми словами?"></textarea>
+    <button id="btn-ask" class="primary">Спросить</button>
+  </div>
 </aside>
+
+<div id="help" class="modal" hidden>
+  <div class="modal-box">
+    <button class="close" id="help-close">×</button>
+    <h2>Как пользоваться приложением</h2>
+    <p>Это не курс с видео. Это 73 шага, которые вы делаете руками, и проверки,
+      которые говорят «сошлось» или «не сошлось» — без «молодец, продолжай».</p>
+    <h3>Слева — порядок прохождения</h3>
+    <p>Шаги сгруппированы по шести этапам: «Основание», «Данные в руках»,
+      «Показать», «Автоматизировать», «Специализация», «Выход». Идите сверху
+      вниз: каждый следующий модуль опирается на предыдущий.
+      Серые шаги <i>«Декларация»</i> — служебные, для человека они не нужны,
+      их можно пропускать.</p>
+    <h3>В центре — сам шаг</h3>
+    <p>Разделы пронумерованы одинаково у всех шагов. 1.4 «Задание» и
+      1.5 «Критерий готовности» выделены — это то, ради чего шаг существует.
+      Кнопки проверки стоят сразу под критерием.</p>
+    <h3>Справа — ассистент</h3>
+    <p>Отвечает по тексту открытого шага. Если ответа в шаге нет — так и
+      скажет, а не придумает.</p>
+    <h3>Что попадает в журнал</h3>
+    <p><code>research/self.md</code> — единственный файл, который приложение
+      меняет. Одна строка на сессию: дата, тема, план часов, факт, где застряли,
+      что оказалось лишним. По нему потом чинятся оценки часов всей программы.</p>
+    <h3>Если что-то не работает</h3>
+    <p>Красная надпись вместо ответа ассистента — скорее всего, не заполнен
+      <code>app/.env</code> с ключом. Всё остальное — шаги, проверки, таймер,
+      журнал — работает и без ключа.</p>
+  </div>
+</div>
 
 <script src="/static/app.js"></script>
 </body>

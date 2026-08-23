@@ -1,9 +1,10 @@
 "use strict";
 
-let current = null;      // объект шага из /api/step
+let tree = null;         // ответ /api/tree
+let current = null;      // ответ /api/step для открытого шага
 let timerHandle = null;
-let elapsedBase = 0;     // секунды, накопленные до текущего отрезка
-let runningSince = null; // момент старта отрезка в браузере
+let elapsedBase = 0;
+let runningSince = null;
 let history = [];        // история чата — только в памяти вкладки
 
 const $ = (id) => document.getElementById(id);
@@ -18,99 +19,249 @@ async function api(path, body) {
   return data;
 }
 
-function esc(s) {
-  return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const esc = (s) => String(s == null ? "" : s)
+  .replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const STATUS_TEXT = { not_started: "не начат", running: "идёт", paused: "пауза", done: "закончен" };
+
+/* ==================================================================
+   ДЕРЕВО — порядок прохождения по шести этапам части 6.2 blueprint
+   ================================================================== */
+
+async function loadTree(keepOpen) {
+  tree = await api("/api/tree");
+  renderTree();
+  renderHome();
+  const pct = tree.total ? Math.round((tree.done / tree.total) * 100) : 0;
+  $("top-bar").style.width = pct + "%";
+  $("top-count").textContent = `${tree.done} из ${tree.total} шагов`;
+  if (!tree.assistant) {
+    $("chat-hint").innerHTML =
+      'Ключ не найден — чат и вердикт ИИ выключены. Заполните <code>app/.env</code> ' +
+      'по образцу <code>app/.env.example</code> и перезапустите приложение. ' +
+      'Всё остальное работает и без ключа.';
+    $("chat-hint").classList.add("fail");
+  }
+  if (keepOpen) highlightActive();
 }
 
-/* ------------------------------------------------------------- дерево */
-
-async function loadTree() {
-  const data = await api("/api/tree");
+function renderTree() {
+  const filter = $("tree-filter").value.trim().toLowerCase();
   const box = $("tree-body");
   box.innerHTML = "";
-  for (const mod of data.modules) {
+  box.classList.remove("loading");
+
+  for (const stage of tree.stages) {
+    const modules = stage.modules
+      .map((mod) => ({ mod, steps: mod.steps.filter((s) => matches(s, mod, filter)) }))
+      .filter((x) => x.steps.length);
+    if (!modules.length) continue;
+
     const el = document.createElement("div");
-    el.className = "mod";
-    const head = document.createElement("div");
-    head.className = "mod-head";
-    head.innerHTML = `<span>${esc(mod.module)}</span><span class="mod-count">${mod.done}/${mod.total}</span>`;
-    el.appendChild(head);
-    const list = document.createElement("div");
-    list.hidden = true;
-    for (const st of mod.steps) {
-      const a = document.createElement("div");
-      a.className = "step-link" + (st.declaration ? " decl" : "") +
-        (st.status === "done" ? " done" : "") + (st.status === "running" ? " running" : "");
-      a.dataset.id = st.step_id;
-      const marks = (st.has_checks ? '<span class="badge" title="есть скрипт проверки">▣</span>' : "") +
-        (st.deferred ? '<span class="badge" title="отложенный ручной прогон">△</span>' : "");
-      a.innerHTML = esc(st.title) + marks;
-      a.onclick = () => openStep(st.module, st.number);
-      list.appendChild(a);
+    el.className = "stage";
+    el.innerHTML =
+      `<div class="stage-head"><span><span class="n">Этап ${stage.number}</span> ${esc(stage.name)}</span>` +
+      `<span title="часы по blueprint 6.2">${esc(stage.hours)} ч</span></div>`;
+
+    for (const { mod, steps } of modules) {
+      const m = document.createElement("div");
+      m.className = "mod";
+      const complete = mod.total && mod.done === mod.total ? " complete" : "";
+      m.innerHTML =
+        `<div class="mod-head${complete}" title="${esc(mod.kind)} · ${esc(mod.hours)} ч">` +
+        `<span class="code">${esc(mod.module)}</span>` +
+        `<span class="name">${esc(mod.name)}</span>` +
+        `<span class="count">${mod.done}/${mod.total}</span></div>`;
+      const list = document.createElement("div");
+      list.className = "mod-steps";
+      list.hidden = !filter && !(current && current.module === mod.module);
+
+      for (const st of steps) {
+        const a = document.createElement("div");
+        a.className = "step-link" + (st.declaration ? " decl" : "") +
+          (st.status === "done" ? " done" : "") + (st.status === "running" ? " running" : "");
+        a.dataset.id = st.step_id;
+        a.title = st.full_title;
+        const marks = (st.has_checks ? '<span class="badge" title="есть проверка скриптом">▣</span>' : "") +
+          (st.deferred ? '<span class="badge" title="нужен ручной прогон на настоящем инструменте">△</span>' : "");
+        const label = st.declaration ? "Декларация модуля — служебное, можно пропустить" : st.title;
+        a.innerHTML = `<span class="num">${st.declaration ? "—" : String(st.number).padStart(2, "0")}</span>` +
+          `<span class="t">${esc(label)}</span>${marks}`;
+        a.onclick = () => openStep(st.module, st.number);
+        list.appendChild(a);
+      }
+      m.querySelector(".mod-head").onclick = () => { list.hidden = !list.hidden; };
+      m.appendChild(list);
+      el.appendChild(m);
     }
-    head.onclick = () => { list.hidden = !list.hidden; };
-    if (current && current.module === mod.module) list.hidden = false;
-    el.appendChild(list);
     box.appendChild(el);
   }
-  if (!data.assistant) {
-    $("chat-log").innerHTML =
-      '<div class="msg ai">Ключ не найден: заполните <code>app/.env</code> по образцу <code>app/.env.example</code>.</div>';
-  }
+  if (!box.children.length) box.innerHTML = '<p class="hint">Ничего не найдено.</p>';
+  highlightActive();
 }
 
-/* --------------------------------------------------------------- шаг */
+function matches(step, mod, filter) {
+  if (!filter) return true;
+  return (step.full_title + " " + mod.module + " " + mod.name + " " + step.skill)
+    .toLowerCase().includes(filter);
+}
+
+function highlightActive() {
+  document.querySelectorAll(".step-link").forEach((n) =>
+    n.classList.toggle("active", !!current && n.dataset.id === current.step_id));
+}
+
+$("tree-filter").oninput = () => renderTree();
+
+/* ==================================================================
+   СТАРТОВЫЙ ЭКРАН
+   ================================================================== */
+
+function renderHome() {
+  const n = tree.next_step;
+  $("home-next").innerHTML = n
+    ? `<div class="label">${tree.done ? "Продолжить здесь" : "Начать здесь"}</div>
+       <h3>${esc(n.module)}.${String(n.number).padStart(2, "0")} — ${esc(n.title)}</h3>
+       <div class="meta">${esc(n.module_name)} · этап «${esc(n.stage)}» · ${esc(n.plan_hours)} ч
+         ${n.status === "paused" ? " · сессия на паузе" : ""}</div>
+       <button class="primary" id="btn-go">Открыть шаг</button>`
+    : `<div class="label">Программа пройдена</div>
+       <h3>Все ${tree.total} шагов закрыты</h3>
+       <div class="meta">Журнал прохождения — <code>research/self.md</code>.</div>`;
+  if (n) $("btn-go").onclick = () => openStep(n.module, n.number);
+
+  const rows = tree.stages.map((s) => {
+    const cur = tree.next_step && s.modules.some((m) => m.module === tree.next_step.module);
+    return `<tr class="${cur ? "current" : ""}">
+      <td><b>${s.number}. ${esc(s.name)}</b></td>
+      <td>${s.modules.map((m) => esc(m.module)).join(", ")}</td>
+      <td>${esc(s.hours)} ч</td>
+      <td>${s.done}/${s.total}</td></tr>`;
+  }).join("");
+  $("home-stages").innerHTML =
+    `<h2>Шесть этапов</h2>
+     <p class="hint">Порядок и часы — из <code>design/blueprint.md</code>, часть 6.2.
+       Недели: при 10 ч/нед — вся программа 43–56, при 25 ч/нед — 18–23.</p>
+     <table class="stages"><tr><th>Этап</th><th>Что входит</th><th>Часы</th><th>Пройдено</th></tr>
+     ${rows}</table>`;
+}
+
+/* ==================================================================
+   ШАГ
+   ================================================================== */
 
 async function openStep(module, number) {
   current = await api(`/api/step/${module}/${number}`);
   history = [];
   $("chat-log").innerHTML = "";
-  $("step-empty").hidden = true;
+  $("home").hidden = true;
   $("step-body").hidden = false;
+  $("step").scrollTop = 0;
+
+  $("crumbs").innerHTML =
+    `<b>${esc(current.module)}</b> ${esc(current.module_name)}` +
+    (current.position ? ` · шаг ${current.position} из ${current.of}` : " · служебный файл") +
+    ` · <span title="файл, который вы читаете">${esc(current.rel_path)}</span>`;
   $("step-title").textContent = current.title;
 
   const h = current.header;
-  $("step-meta").innerHTML = ["Умение", "Модуль", "Требуется до этого", "Время"]
-    .filter((k) => h[k])
-    .map((k) => `<b>${k}:</b> ${esc(h[k])}`).join(" &nbsp;·&nbsp; ") +
-    ` &nbsp;·&nbsp; <code>${esc(current.rel_path)}</code>`;
+  const chips = [];
+  if (current.plan_hours !== "—") chips.push(`<span class="chip strong">⏱ ${esc(current.plan_hours)} ч по плану</span>`);
+  if (h["Умение"]) chips.push(`<span class="chip">умение ${esc(h["Умение"])}</span>`);
+  if (current.checks.length) chips.push(`<span class="chip">▣ проверяется скриптом</span>`);
+  if (current.deferred.length) chips.push(`<span class="chip">△ нужен ручной прогон</span>`);
+  if (h["Требуется до этого"]) chips.push(`<span class="chip">до этого: ${esc(h["Требуется до этого"].slice(0, 70))}</span>`);
+  $("step-chips").innerHTML = chips.join("");
 
   $("deferred").innerHTML = current.deferred.map((d) => `
     <div class="deferred-row">
-      <div class="head">Отложенный ручной прогон — ${esc(d.section)}${d.scope === "step" ? " (этот шаг)" : ""}</div>
+      <div class="head">△ Здесь оценка ИИ не заменяет реальный прогон — ${esc(d.section)}</div>
       <div>${esc(d.what)}</div>
-      <div class="warn">Вердикт ИИ по критерию реального прогона на Desktop / Tableau / Looker не заменяет.</div>
+      <div class="warn">Этот шаг делается руками в настоящем приложении (Power BI Desktop,
+        Tableau Public, Looker Studio). Ассистент может проверить формулировку ответа,
+        но не то, что вы действительно построили.</div>
     </div>`).join("");
 
-  renderChecks();
-  $("verdict-panel").hidden = !current.has_criterion;
-  $("verdict-out").innerHTML = "";
-  $("v-answer").value = "";
-  $("step-html").innerHTML = current.html;
+  $("preamble").innerHTML = current.preamble_html ? `<div class="md">${current.preamble_html}</div>` : "";
+  $("preamble").hidden = !current.preamble_html;
 
+  renderSections();
+  renderStepNav();
+  renderSuggestions();
   applyState(current.state);
-  document.querySelectorAll(".step-link").forEach((n) =>
-    n.classList.toggle("active", n.dataset.id === current.step_id));
-  $("step").scrollTop = 0;
+  renderTree();
 }
 
-/* ---------------------------------------------------------- проверки */
+function renderSections() {
+  const toc = current.sections.filter((s) => s.num)
+    .map((s) => `<a href="#sec-${s.num}" class="${s.key ? "key" : ""}">${esc(s.num)} ${esc(s.title)}</a>`).join("");
+  $("toc").innerHTML = toc;
+  $("toc").hidden = !toc;
 
-function renderChecks() {
-  const box = $("checks");
-  if (!current.checks.length) {
-    box.innerHTML = '<h3>Проверка</h3><p class="hint">В этом шаге нет команды <code>check_*.py</code> — критерий проверяется иначе (см. раздел 1.5).</p>';
-    return;
+  const box = $("sections");
+  box.innerHTML = "";
+  for (const s of current.sections) {
+    const el = document.createElement("div");
+    el.className = "sec" + (s.key ? " key" : "");
+    el.id = "sec-" + s.num;
+    el.innerHTML =
+      `<div class="sec-head"><span class="num">${esc(s.num)}</span>` +
+      `<span class="ttl">${esc(s.title)}</span>` +
+      `<span class="hint">${esc(s.hint)}</span><span class="caret">▾</span></div>` +
+      `<div class="sec-body md">${s.html}</div>`;
+    el.querySelector(".sec-head").onclick = () => el.classList.toggle("collapsed");
+    box.appendChild(el);
+
+    // Проверки стоят там, где они нужны: сразу под критерием готовности.
+    if (s.num === "1.5") {
+      box.appendChild(buildChecksPanel());
+      if (current.has_criterion) box.appendChild(buildVerdictPanel());
+    }
   }
-  box.innerHTML = "<h3>Проверка</h3>" + current.checks.map((c, i) => `
-    <div class="check">
-      <div class="cmd">${esc(c.raw)}${c.cwd ? ` <span class="hint">(из ${esc(c.cwd)})</span>` : ""}</div>
-      <button data-check="${i}">Проверить</button>
-      <div id="check-out-${i}"></div>
-    </div>`).join("");
-  box.querySelectorAll("button[data-check]").forEach((b) => {
+  // Шаг без раздела 1.5 (декларации) — панель проверок в конец, если есть команды.
+  if (!current.sections.some((s) => s.num === "1.5") && current.checks.length) {
+    box.appendChild(buildChecksPanel());
+  }
+}
+
+function renderStepNav() {
+  const link = (s, dir) => s
+    ? `<a href="#" data-go="${s.module}/${s.number}">${dir} ${esc(s.module)}.${String(s.number).padStart(2, "0")} ${esc(s.title)}</a>`
+    : "<span></span>";
+  $("step-nav").innerHTML = link(current.prev, "←") + link(current.next, "→");
+  $("step-nav").querySelectorAll("a[data-go]").forEach((a) => {
+    a.onclick = (e) => {
+      e.preventDefault();
+      const [m, n] = a.dataset.go.split("/");
+      openStep(m, Number(n));
+    };
+  });
+}
+
+/* ------------------------------------------------------- проверки */
+
+function buildChecksPanel() {
+  const el = document.createElement("div");
+  el.className = "panel";
+  if (!current.checks.length) {
+    el.innerHTML = `<h3>Проверка</h3><p class="hint">У этого шага нет скрипта:
+      критерий выше проверяется вашими руками — сверкой файла, числа или экрана.
+      Письменную часть можно отдать ассистенту (блок ниже).</p>`;
+    return el;
+  }
+  el.innerHTML = `<h3>Проверка скриптом</h3>
+    <p class="hint">Запускается тот же файл, что написан в шаге, — вывод показывается
+      дословно, как в терминале. Порог указан в критерии выше.</p>` +
+    current.checks.map((c, i) => `
+      <div class="check">
+        <div class="cmd">${esc(c.raw)}${c.cwd && c.cwd !== "." ? ` (из ${esc(c.cwd)})` : ""}</div>
+        <button data-check="${i}" class="primary">Проверить</button>
+        <div id="check-out-${i}"></div>
+      </div>`).join("");
+  el.querySelectorAll("button[data-check]").forEach((b) => {
     b.onclick = () => runCheck(Number(b.dataset.check), b);
   });
+  return el;
 }
 
 async function runCheck(index, btn) {
@@ -123,11 +274,14 @@ async function runCheck(index, btn) {
     const painted = esc(body)
       .replace(/\[OK\]/g, '<span class="ok">[OK]</span>')
       .replace(/\[FAIL\]/g, '<span class="fail">[FAIL]</span>');
+    const verdict = r.returncode === 0
+      ? "код возврата 0 — скрипт не нашёл расхождений"
+      : `код возврата ${r.returncode} — есть расхождения, смотрите строки [FAIL]`;
     out.innerHTML =
-      `<div><span class="tag script">РЕЗУЛЬТАТ СКРИПТА</span> код возврата ${r.returncode}` +
+      `<div class="verdict-line" style="margin-top:10px"><span class="tag script">РЕЗУЛЬТАТ СКРИПТА</span> ${esc(verdict)}` +
       (r.error ? ` — ${esc(r.error)}` : "") + `</div>` +
-      `<div class="cmd">${esc(r.command)} &nbsp;(cwd: ${esc(r.cwd)})</div>` +
-      `<pre class="out">${painted || "(пустой вывод)"}</pre>`;
+      `<pre class="out">${painted || "(пустой вывод)"}</pre>` +
+      `<p class="hint">То же самое в терминале: <code>${esc(r.command)}</code> из <code>${esc(r.cwd)}</code></p>`;
   } catch (e) {
     out.innerHTML = `<p class="fail">${esc(e.message)}</p>`;
   } finally {
@@ -135,21 +289,74 @@ async function runCheck(index, btn) {
   }
 }
 
-/* ----------------------------------------------------------- таймер */
+/* ------------------------------------------------------- вердикт ИИ */
+
+function buildVerdictPanel() {
+  const el = document.createElement("div");
+  el.className = "panel";
+  el.innerHTML = `
+    <h3>Проверка письменного ответа ассистентом</h3>
+    <p class="hint">Для того, что скриптом не проверяется: письменные ответы, вопрос 1.8,
+      описание сделанного в Power BI или Tableau. Ассистент сверит ваш текст с разделами
+      1.5 и 1.6 этого шага. <b>Это слабее скрипта</b> — он проверяет формулировку, а не файл.</p>
+    <label>Что проверяем<input id="v-task" placeholder="например: задание 13, или вопрос 1.8"></label>
+    <label>Ваш ответ<textarea id="v-answer" rows="5" placeholder="напишите ответ своими словами"></textarea></label>
+    <button id="btn-verdict" class="primary">Проверить по критерию</button>
+    <div id="verdict-out"></div>`;
+  el.querySelector("#btn-verdict").onclick = askVerdict;
+  return el;
+}
+
+async function askVerdict() {
+  const out = $("verdict-out");
+  out.innerHTML = '<p class="hint">ассистент читает ваш ответ и разделы 1.5 и 1.6…</p>';
+  try {
+    const v = await api("/api/assistant/verdict", {
+      step_id: current.step_id,
+      task: $("v-task").value,
+      answer: $("v-answer").value,
+    });
+    const list = (title, items) => items && items.length
+      ? `<h4>${title}</h4><ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+    out.innerHTML = `
+      <div class="verdict">
+        <div class="verdict-line"><span class="tag ai">ВЕРДИКТ ИИ ПО КРИТЕРИЮ — НЕ РЕЗУЛЬТАТ СКРИПТА</span></div>
+        <div class="big">${esc(v.verdict)}</div>
+        <p>${esc(v.explanation)}</p>
+        ${list("Что ответ закрывает", v.matched)}
+        ${list("Чего в ответе нет", v.missing)}
+        ${list("Попадание в «Типичные ошибки» (1.6)", v.errors_hit)}
+        <p class="hint">Это оценка текста, а не проверка файла. Ручной прогон инструмента она не заменяет.</p>
+        <p class="hint">В журнал уйдёт: <code>${esc(v.note)}</code></p>
+      </div>`;
+    await refreshState();
+  } catch (e) {
+    out.innerHTML = `<p class="fail">${esc(e.message)}</p>`;
+  }
+}
+
+/* ==================================================================
+   СЕССИЯ И ТАЙМЕР
+   ================================================================== */
 
 function fmt(sec) {
   const s = Math.max(0, Math.floor(sec));
   const p = (n) => String(n).padStart(2, "0");
-  return `${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`;
+  return `${Math.floor(s / 3600)}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`;
 }
 
-function currentSeconds() {
-  return elapsedBase + (runningSince ? (Date.now() - runningSince) / 1000 : 0);
-}
+const currentSeconds = () => elapsedBase + (runningSince ? (Date.now() - runningSince) / 1000 : 0);
+const tick = () => { $("timer").textContent = fmt(currentSeconds()); };
 
-function tick() { $("timer").textContent = fmt(currentSeconds()); }
+const HINTS = {
+  not_started: "Нажмите «Начал» — пойдёт таймер. Без него шаг тоже читается, но час не попадёт в журнал.",
+  running: "Таймер идёт. Отходите — нажмите «Пауза»: перерывы в честные часы не считаются.",
+  paused: "Пауза. «Продолжил» — вернуться к работе, «Закончил» — записать сессию в журнал.",
+  done: "Шаг закрыт. Записи в журнале уже нет смысла править отсюда — правьте сам файл.",
+};
 
 function applyState(st) {
+  current.state = st;
   elapsedBase = st.elapsed_sec || 0;
   runningSince = st.status === "running" ? Date.now() : null;
   if (timerHandle) clearInterval(timerHandle);
@@ -164,98 +371,128 @@ function applyState(st) {
   $("btn-finish").hidden = done || st.status === "not_started";
   $("btn-reopen").hidden = !done;
   $("finish-form").hidden = true;
-  $("session-status").textContent = {
-    not_started: "не начат", running: "идёт", paused: "пауза", done: "закончен",
-  }[st.status] || "";
+  const pill = $("session-status");
+  pill.textContent = STATUS_TEXT[st.status] || "";
+  pill.className = "pill " + (st.status === "running" ? "running" : st.status === "done" ? "done" : "");
+  $("session-hint").textContent = HINTS[st.status] || "";
+}
+
+async function refreshState() {
+  const s = await api(`/api/step/${current.module}/${current.number}`);
+  current.state = s.state;
+  return s.state;
 }
 
 $("btn-start").onclick = async () => applyState(await api("/api/session/start", { step_id: current.step_id }));
 $("btn-pause").onclick = async () => applyState(await api("/api/session/pause", { step_id: current.step_id }));
-$("btn-reopen").onclick = async () => applyState(await api("/api/session/reopen", { step_id: current.step_id }));
+$("btn-reopen").onclick = async () => { applyState(await api("/api/session/reopen", { step_id: current.step_id })); loadTree(true); };
 $("btn-cancel").onclick = () => { $("finish-form").hidden = true; };
 
 $("btn-finish").onclick = () => {
   const fact = Math.floor(currentSeconds() / 900) * 0.25;
-  $("f-theme").value = `${current.module}.${String(current.number).padStart(2, "0")} ${current.title}`;
+  $("f-theme").value = `${current.code} ${current.title}`;
   $("f-plan").value = current.plan_hours;
   $("f-fact").value = String(fact);
-  $("f-notes").innerHTML = (current.state.notes || []).length
-    ? '<p class="hint">В «Где застрял» будут дописаны пометки правила 6:<br>' +
-      current.state.notes.map(esc).join("<br>") + "</p>"
-    : "";
+  const notes = current.state.notes || [];
+  $("f-notes").innerHTML = notes.length
+    ? `<p class="hint">В «Где застрял» приложение допишет ${notes.length} пометк${notes.length === 1 ? "у" : "и"}
+       об обращениях к ассистенту:<br>${notes.map((n) => `<code>${esc(n)}</code>`).join("<br>")}</p>`
+    : `<p class="hint">Обращений к ассистенту за сессию не было — в журнале это тоже факт.</p>`;
   $("finish-form").hidden = false;
+  $("finish-form").scrollIntoView({ behavior: "smooth", block: "center" });
 };
 
 $("btn-write").onclick = async () => {
-  const r = await api("/api/session/finish", {
-    step_id: current.step_id,
-    theme: $("f-theme").value,
-    plan: $("f-plan").value,
-    stuck: $("f-stuck").value,
-    useless: $("f-useless").value,
-  });
-  $("journal-tail").hidden = false;
-  $("journal-tail").textContent = "research/self.md, последние строки:\n" + r.tail.join("\n");
-  $("f-stuck").value = "";
-  $("f-useless").value = "";
-  current.state = r.state;
-  applyState(r.state);
-  await loadTree();
-};
-
-/* ---------------------------------------------------------- вердикт */
-
-$("btn-verdict").onclick = async () => {
-  const out = $("verdict-out");
-  out.innerHTML = '<p class="hint">ассистент сверяет ответ с 1.5 и 1.6…</p>';
+  const btn = $("btn-write");
+  btn.disabled = true;
   try {
-    const v = await api("/api/assistant/verdict", {
+    const r = await api("/api/session/finish", {
       step_id: current.step_id,
-      task: $("v-task").value,
-      answer: $("v-answer").value,
+      theme: $("f-theme").value,
+      plan: $("f-plan").value,
+      stuck: $("f-stuck").value,
+      useless: $("f-useless").value,
     });
-    const list = (title, items) => items && items.length
-      ? `<h4>${title}</h4><ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
-    out.innerHTML = `
-      <div class="verdict">
-        <div><span class="tag ai">ВЕРДИКТ ИИ ПО КРИТЕРИЮ 1.5 — НЕ РЕЗУЛЬТАТ СКРИПТА</span></div>
-        <h4>Вердикт: ${esc(v.verdict)}</h4>
-        <p>${esc(v.explanation)}</p>
-        ${list("Закрыто по 1.5", v.matched)}
-        ${list("Не закрыто по 1.5", v.missing)}
-        ${list("Попадание в 1.6 «Типичные ошибки»", v.errors_hit)}
-        <p class="hint">${esc(v.source)}. Ручной прогон инструмента не заменяет.</p>
-        <p class="hint">В журнал: ${esc(v.note)}</p>
-      </div>`;
-    current.state = await api(`/api/step/${current.module}/${current.number}`).then((s) => s.state);
+    $("journal-tail").hidden = false;
+    $("journal-tail").textContent = "Записано в research/self.md:\n\n" + r.tail.join("\n");
+    $("f-stuck").value = "";
+    $("f-useless").value = "";
+    applyState(r.state);
+    await loadTree(true);
   } catch (e) {
-    out.innerHTML = `<p class="fail">${esc(e.message)}</p>`;
+    alert("Не записалось: " + e.message);
+  } finally {
+    btn.disabled = false;
   }
 };
 
-/* -------------------------------------------------------------- чат */
+/* ==================================================================
+   АССИСТЕНТ
+   ================================================================== */
 
-$("btn-ask").onclick = async () => {
+function renderSuggestions() {
+  const q = [
+    "Объясни своими словами, что от меня требует этот шаг",
+    "Что именно нужно сделать в задании 1.4 — по пунктам",
+    "Разбери критерий готовности 1.5: как я пойму, что закрыл шаг",
+  ];
+  $("chat-suggest").innerHTML = q.map((t) => `<button data-q="${esc(t)}">${esc(t)}</button>`).join("");
+  $("chat-suggest").querySelectorAll("button").forEach((b) => {
+    b.onclick = () => { $("chat-input").value = b.dataset.q; ask(); };
+  });
+}
+
+async function ask() {
   const q = $("chat-input").value.trim();
   if (!q || !current) return;
   $("chat-input").value = "";
+  $("chat-suggest").innerHTML = "";
   const log = $("chat-log");
   log.insertAdjacentHTML("beforeend", `<div class="msg you">${esc(q)}</div>`);
   const pending = document.createElement("div");
   pending.className = "msg ai";
-  pending.textContent = "…";
+  pending.textContent = "думает…";
   log.appendChild(pending);
+  log.scrollTop = log.scrollHeight;
   try {
     const r = await api("/api/assistant/ask", { step_id: current.step_id, question: q, history });
     history.push({ role: "user", content: q }, { role: "assistant", content: r.answer });
-    pending.innerHTML = esc(r.answer) +
-      `<span class="note">в журнал: ${esc(r.note)}</span>`;
-    const s = await api(`/api/step/${current.module}/${current.number}`);
-    current.state = s.state;
+    pending.innerHTML = esc(r.answer) + `<span class="note">В журнал: ${esc(r.note)}</span>`;
+    await refreshState();
   } catch (e) {
+    pending.className = "msg err";
     pending.textContent = e.message;
   }
   log.scrollTop = log.scrollHeight;
+}
+
+$("btn-ask").onclick = ask;
+$("chat-input").onkeydown = (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) ask();
 };
+
+/* ==================================================================
+   ПОМОЩЬ
+   ================================================================== */
+
+$("brand").onclick = () => {
+  $("step-body").hidden = true;
+  $("home").hidden = false;
+  current = null;
+  highlightActive();
+  renderTree();
+  $("step").scrollTop = 0;
+};
+
+$("btn-help").onclick = () => { $("help").hidden = false; };
+$("help-close").onclick = () => { $("help").hidden = true; };
+$("help").onclick = (e) => { if (e.target === $("help")) $("help").hidden = true; };
+
+try {
+  if (!localStorage.getItem("seen-help")) {
+    $("help").hidden = false;
+    localStorage.setItem("seen-help", "1");
+  }
+} catch (e) { /* приватное окно — не беда */ }
 
 loadTree();

@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM = ROOT / "program"
 DEFERRED = ROOT / "DEFERRED.md"
+BLUEPRINT = ROOT / "design" / "blueprint.md"
 
 # Порядок разделов дерева: модули натуральной сортировкой, затем проекты,
 # затем блок «Выход». Тот же порядок, что в части 6.1 blueprint.
@@ -276,3 +277,184 @@ def deferred_for(module: str, number: int | None = None) -> list[dict]:
                 }
             )
     return out
+
+
+# --------------------------------------------- названия и порядок этапов
+#
+# Человеку нужны имя модуля («M3 SQL», а не «M3») и порядок прохождения
+# («сначала M0 и M1, потом M2 и M3»). И то и другое уже посчитано в
+# `design/blueprint.md`: часть 6.1 называет модули и часы, часть 6.2
+# раскладывает их по шести этапам. Приложение читает эти две таблицы, а
+# не заводит третий список — иначе порядок в интерфейсе разошёлся бы с
+# порядком в проекте, и разошёлся бы молча.
+
+CODE_IN_TEXT = re.compile(r"\b([MP])(\d+)[ab]?\b")
+PROJECT_NAME = re.compile(r"^P\d+\s+«([^»]+)»", re.MULTILINE)
+
+# Строка части 6.1, которая называет блок «Выход» по содержанию, а не
+# кодом: в 6.1 у него нет кода, и привязать её к `career` можно только по
+# тексту (решение 37 — блок намеренно не модуль).
+CAREER_ROW = "Сборка резюме"
+
+
+def _blueprint_text() -> str:
+    return BLUEPRINT.read_text(encoding="utf-8")
+
+
+def _table_rows(text: str, heading: str) -> list[list[str]]:
+    """Строки таблицы, идущей сразу после заголовка `## <heading>`."""
+    start = text.index(f"## {heading}")
+    end = text.find("\n## ", start + 1)
+    body = text[start : end if end != -1 else len(text)]
+    rows = []
+    for line in body.splitlines():
+        if not line.startswith("|") or re.match(r"^\|[\s:\-|]+\|?$", line):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        rows.append(cells)
+    return rows
+
+
+def _clean(cell: str) -> str:
+    return cell.replace("**", "").strip()
+
+
+@lru_cache(maxsize=1)
+def _catalog_cached(mtime: float) -> dict[str, dict]:
+    text = _blueprint_text()
+    out: dict[str, dict] = {}
+    for cells in _table_rows(text, "6.1. Часы по модулям и статус оценки"):
+        label = _clean(cells[0])
+        if label.startswith("Модуль"):
+            continue
+        hours = _clean(cells[1]) if len(cells) > 1 else ""
+        m = re.match(r"^([MP]\d+)\s*(.*)$", label)
+        if m:
+            out[m.group(1)] = {"name": m.group(2).strip(), "hours": hours}
+        elif label.startswith(CAREER_ROW):
+            out[CAREER] = {"name": "Выход: резюме, профиль, режим поиска", "hours": hours}
+
+    # У проектов в части 6.1 стоит только код. Название проекта живёт в
+    # его собственной декларации, в виде `P1 «Какая точка худшая»`.
+    for code, meta in out.items():
+        if meta["name"]:
+            continue
+        decl = PROGRAM / code / "step-00.md"
+        if decl.is_file():
+            found = PROJECT_NAME.search(decl.read_text(encoding="utf-8"))
+            meta["name"] = found.group(1) if found else "проект портфолио"
+    return out
+
+
+def catalog() -> dict[str, dict]:
+    """Код модуля → его имя и часы из части 6.1 blueprint."""
+    return _catalog_cached(BLUEPRINT.stat().st_mtime)
+
+
+@lru_cache(maxsize=1)
+def _stages_cached(mtime: float) -> tuple[dict, ...]:
+    text = _blueprint_text()
+    known = set(catalog())
+    stages = []
+    for cells in _table_rows(text, "6.2. Этапы и недели"):
+        label = _clean(cells[0])
+        m = re.match(r"^(\d+)\.\s*(.+)$", label)
+        if not m:
+            continue  # шапка и строка «Итого»
+        codes: list[str] = []
+        for c in CODE_IN_TEXT.finditer(cells[1]):
+            code = f"{c.group(1)}{c.group(2)}"  # M13a и M13b — один модуль M13
+            if code in known and code not in codes:
+                codes.append(code)
+        if "сборка артефактов" in cells[1].lower():
+            codes.append(CAREER)
+        stages.append(
+            {
+                "number": int(m.group(1)),
+                "name": m.group(2).strip(),
+                "codes": codes,
+                "hours": _clean(cells[2]) if len(cells) > 2 else "",
+                "weeks_10": _clean(cells[3]) if len(cells) > 3 else "",
+                "weeks_25": _clean(cells[4]) if len(cells) > 4 else "",
+                "raw": cells[1],
+            }
+        )
+    return tuple(stages)
+
+
+def stages() -> list[dict]:
+    """Шесть этапов части 6.2 blueprint — порядок прохождения программы."""
+    return [dict(s) for s in _stages_cached(BLUEPRINT.stat().st_mtime)]
+
+
+def stage_order() -> list[str]:
+    """Все модули в порядке этапов; не названные в 6.2 — в конце."""
+    order: list[str] = []
+    for stage in stages():
+        for code in stage["codes"]:
+            if code not in order and (PROGRAM / code).is_dir():
+                order.append(code)
+    for code in modules():
+        if code not in order:
+            order.append(code)
+    return order
+
+
+# ----------------------------------------------- разделы шага по порядку
+
+# Подпись человеческим языком к номеру раздела. Это подпись интерфейса, а
+# не содержание шага: сам заголовок берётся из файла как есть, подпись
+# только объясняет, зачем читателю этот раздел. Номера у всех 73 шагов
+# одинаковые — их задаёт раздел 1 скилла curriculum-design.
+SECTION_HINTS = {
+    "1.1": "зачем этот шаг и что вы будете уметь после него",
+    "1.2": "минимум теории, которого хватает для задания",
+    "1.3": "тот же приём, разобранный на данных программы",
+    "1.4": "то, что делаете руками — главная часть шага",
+    "1.5": "как проверить, что шаг действительно закрыт",
+    "1.6": "куда попадают чаще всего и почему это выглядит правильным",
+    "1.7": "сколько это занимает на самом деле",
+    "1.8": "как то же самое спрашивают на собеседовании",
+}
+
+# Разделы, ради которых человек открывает шаг во второй раз.
+SECTION_KEY = {"1.4", "1.5"}
+
+
+def ordered_sections(text: str) -> list[dict]:
+    """Разделы `## N.M. Название` в порядке файла, с телом и подписью.
+
+    Возвращает и «преамбулу» — шапку файла до первого раздела: в ней живут
+    `Умение:`, `Время:` и предупреждения деклараций.
+    """
+    marks = list(SECTION.finditer(text))
+    out: list[dict] = []
+    if not marks:
+        return [{"num": "", "title": "", "hint": "", "key": False, "body": text.strip()}]
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+        num = m.group(1)
+        out.append(
+            {
+                "num": num,
+                "title": m.group(2).strip(),
+                "hint": SECTION_HINTS.get(num, ""),
+                "key": num in SECTION_KEY,
+                "body": text[m.end() : end].strip(),
+            }
+        )
+    return out
+
+
+def preamble(text: str) -> str:
+    """Текст между заголовком файла и первым разделом, без шапки полей."""
+    marks = list(SECTION.finditer(text))
+    head = text[: marks[0].start()] if marks else text
+    lines = head.splitlines()[1:]  # без `# Заголовок`
+    kept = [ln for ln in lines if not HEADER_FIELD.match(ln)]
+    # Строки-продолжения шапки («…калибровка — research/self.md»)
+    # начинаются с отступа и идут сразу за полем; они уже показаны в
+    # шапке интерфейса, повторять их в теле незачем.
+    while kept and (kept[0].startswith(" ") or not kept[0].strip()):
+        kept.pop(0)
+    return "\n".join(kept).strip()

@@ -59,35 +59,130 @@ def pygments_css():
 # ----------------------------------------------------------------- API
 
 
+def _short_title(module: str, number: int, title: str) -> str:
+    """`M4.05. Переносит модель…` → `Переносит модель…`.
+
+    Код шага показывается отдельной меткой, дублировать его в названии
+    незачем — в списке из пяти шагов подряд он съедает половину строки.
+    Номер в заголовках написан и с ведущим нулём (`M4.05`, `P1.00`), и без
+    него (`M0.1`, `M3.11`) — снимаются оба вида.
+    """
+    for prefix in (f"{module}.{number:02d}.", f"{module}.{number}."):
+        if title.startswith(prefix):
+            return title[len(prefix):].strip()
+    return title
+
+
+def _module_block(module: str, states: dict) -> dict:
+    meta = repo.catalog().get(module, {})
+    items = []
+    done = 0
+    for st in repo.steps(module):
+        status = states.get(st.step_id, {}).get("status", state.NOT_STARTED)
+        if status == state.DONE and not st.is_declaration:
+            done += 1
+        items.append(
+            {
+                "step_id": st.step_id,
+                "module": module,
+                "number": st.number,
+                "title": _short_title(module, st.number, st.title),
+                "full_title": st.title,
+                "declaration": st.is_declaration,
+                "status": status,
+                "plan_hours": repo.plan_hours(st.header),
+                "skill": st.header.get("Умение", ""),
+                "has_checks": bool(repo.check_commands(module, st.path.read_text(encoding="utf-8"))),
+                "deferred": bool(repo.deferred_for(module, st.number)),
+            }
+        )
+    total = sum(1 for i in items if not i["declaration"])
+    return {
+        "module": module,
+        "name": meta.get("name", ""),
+        "hours": meta.get("hours", ""),
+        "kind": "проект" if module.startswith("P") else ("блок" if module == repo.CAREER else "модуль"),
+        "steps": items,
+        "done": done,
+        "total": total,
+    }
+
+
 @app.get("/api/tree")
 def api_tree():
+    """Дерево в порядке прохождения: шесть этапов части 6.2 blueprint."""
     states = state.all_states()
-    out = []
-    for module in repo.modules():
-        items = []
-        done = 0
-        for st in repo.steps(module):
-            sid = st.step_id
-            status = states.get(sid, {}).get("status", state.NOT_STARTED)
-            if status == state.DONE and not st.is_declaration:
-                done += 1
-            items.append(
-                {
-                    "step_id": sid,
-                    "module": module,
-                    "number": st.number,
-                    "title": st.title,
-                    "declaration": st.is_declaration,
-                    "status": status,
-                    "has_checks": bool(
-                        repo.check_commands(module, st.path.read_text(encoding="utf-8"))
-                    ),
-                    "deferred": bool(repo.deferred_for(module, st.number)),
-                }
-            )
-        total = sum(1 for i in items if not i["declaration"])
-        out.append({"module": module, "steps": items, "done": done, "total": total})
-    return jsonify({"modules": out, "assistant": assistant.available()})
+    blocks: dict[str, dict] = {}
+    placed: set[str] = set()
+    out_stages = []
+    for stage in repo.stages():
+        codes = [c for c in stage["codes"] if (repo.PROGRAM / c).is_dir() and c not in placed]
+        placed.update(codes)
+        for code in codes:
+            blocks[code] = _module_block(code, states)
+        out_stages.append(
+            {
+                "number": stage["number"],
+                "name": stage["name"],
+                "hours": stage["hours"],
+                "weeks_10": stage["weeks_10"],
+                "weeks_25": stage["weeks_25"],
+                "raw": stage["raw"],
+                "modules": [blocks[c] for c in codes],
+                "done": sum(blocks[c]["done"] for c in codes),
+                "total": sum(blocks[c]["total"] for c in codes),
+            }
+        )
+
+    # Первый незакрытый содержательный шаг в порядке этапов — это и есть
+    # ответ на вопрос «что делать сейчас».
+    next_step = None
+    for stage in out_stages:
+        for mod in stage["modules"]:
+            for item in mod["steps"]:
+                if item["declaration"] or item["status"] == state.DONE:
+                    continue
+                if next_step is None:
+                    next_step = dict(item, module_name=mod["name"], stage=stage["name"])
+                break
+            if next_step:
+                break
+        if next_step:
+            break
+
+    done = sum(s["done"] for s in out_stages)
+    total = sum(s["total"] for s in out_stages)
+    return jsonify(
+        {
+            "stages": out_stages,
+            "next_step": next_step,
+            "done": done,
+            "total": total,
+            "assistant": assistant.available(),
+        }
+    )
+
+
+def _neighbours(module: str, number: int) -> dict:
+    """Предыдущий и следующий шаг — внутри модуля, затем по этапам."""
+    order = repo.stage_order()
+    flat: list[dict] = []
+    for code in order:
+        for st in repo.steps(code):
+            flat.append({"step_id": st.step_id, "module": code, "number": st.number,
+                         "title": _short_title(code, st.number, st.title),
+                         "declaration": st.is_declaration})
+    here = next((i for i, s in enumerate(flat) if s["step_id"] == f"{module}/step-{number:02d}"), None)
+    if here is None:
+        return {"prev": None, "next": None, "position": None, "of": None}
+    in_module = [s for s in flat if s["module"] == module and not s["declaration"]]
+    position = next((i + 1 for i, s in enumerate(in_module) if s["number"] == number), None)
+    return {
+        "prev": flat[here - 1] if here > 0 else None,
+        "next": flat[here + 1] if here + 1 < len(flat) else None,
+        "position": position,
+        "of": len(in_module),
+    }
 
 
 @app.get("/api/step/<module>/<int:number>")
@@ -99,21 +194,37 @@ def api_step(module: str, number: int):
     text = st.path.read_text(encoding="utf-8")
     secs = repo.sections(text)
     checks = repo.check_commands(module, text)
+    meta = repo.catalog().get(module, {})
+    sections_out = [
+        {
+            "num": s["num"],
+            "title": s["title"],
+            "hint": s["hint"],
+            "key": s["key"],
+            "html": _render(s["body"]),
+        }
+        for s in repo.ordered_sections(text)
+    ]
     return jsonify(
         {
             "step_id": st.step_id,
             "module": module,
+            "module_name": meta.get("name", ""),
+            "module_hours": meta.get("hours", ""),
             "number": number,
-            "title": st.title,
+            "title": _short_title(module, number, st.title),
+            "code": f"{module}.{number:02d}",
             "rel_path": st.rel_path,
             "header": st.header,
             "plan_hours": repo.plan_hours(st.header),
             "declaration": st.is_declaration,
-            "html": _render(text),
+            "preamble_html": _render(repo.preamble(text)),
+            "sections": sections_out,
             "checks": [{"index": c.index, "raw": c.raw, "cwd": c.cwd} for c in checks],
             "deferred": repo.deferred_for(module, number),
             "has_criterion": "1.5" in secs,
             "state": state.get(st.step_id),
+            **_neighbours(module, number),
         }
     )
 
