@@ -423,6 +423,156 @@ def check_module_hours(blueprint_text: str) -> None:
         ok("часы по модулям: ни одного модуля с разобранными часами шагов")
 
 
+CALIBRATION_CLAIM = re.compile(r"(\d+) из (\d+) часовых\s+оценок помечены как требующие калибровки")
+CALIBRATION_MARK = "**Требуется**"
+
+
+def check_calibration_count(blueprint_text: str) -> None:
+    """Заявление части 7 blueprint «N из M часовых оценок помечены как
+    требующие калибровки» против построчного подсчёта в таблице 6.1.
+
+    Заведено Фазой 4 по факту расхождения, а не заранее. Число 14 было
+    верным 2026-07-29 и разъехалось дважды: решения 28 и 31 добавили
+    пометку M4 и M5 (стало 16), решение 37 — блоку career (17). Всё это
+    время «14 из 24» стояло в четырёх файлах, и ни одна проверка его не
+    читала: часы сверялись, а утверждение о часах — нет. Тот же класс
+    ошибки, что 480–644 (решение 16) и 253–360 (решение 14) — число,
+    посчитанное один раз руками и оставленное жить своей жизнью."""
+    part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
+    rows = [
+        line for line in part61.splitlines()
+        if line.startswith("|") and not re.match(r"^\|[\s:\-|]+\|?$", line)
+    ]
+    total = 0
+    marked = 0
+    for row in rows[1:]:
+        cells = [c.strip() for c in row.strip("|").split("|")]
+        if len(cells) < 4 or parse_range(cells[1]) is None:
+            continue
+        total += 1
+        if CALIBRATION_MARK in cells[3]:
+            marked += 1
+
+    part7 = section(blueprint_text, "# ЧАСТЬ 7.", None)
+    m = CALIBRATION_CLAIM.search(part7)
+    if not m:
+        fail(
+            "часть 7 blueprint: не найдено утверждение «N из M часовых оценок "
+            "помечены как требующие калибровки» — сверять подсчёт не с чем"
+        )
+        return
+    claimed, claimed_total = int(m.group(1)), int(m.group(2))
+    if (claimed, claimed_total) == (marked, total):
+        ok(
+            f"часть 7: «{claimed} из {claimed_total} требуют калибровки» совпадает "
+            f"с построчным подсчётом пометок в таблице 6.1"
+        )
+    else:
+        fail(
+            f"часть 7 заявляет «{claimed} из {claimed_total} часовых оценок требуют "
+            f"калибровки», а подсчёт пометок '{CALIBRATION_MARK}' в таблице 6.1 "
+            f"даёт {marked} из {total}"
+        )
+
+
+CAREER_DIR_NAME = "career"
+CAREER_ROW_MARK = "Сборка резюме"
+
+
+def check_career_hours(blueprint_text: str) -> None:
+    """То же, что check_module_hours(), но для блока «Выход»
+    (program/career/) — он не модуль и под маску [MP]* не попадает
+    (решение 37).
+
+    Без этой проверки блок выпадал бы из контроля часов вовсе: его строка
+    в части 6.1 участвует в построчной сумме (её считает check_hours по
+    всем строкам таблицы), но сумму часов его шагов никто бы не сверял с
+    вилкой. Честные часы решение 21 прямо называет тем, что не сужается,
+    поэтому цена отказа от имени M17 оплачена здесь.
+
+    Строка части 6.1 ищется не по ID модуля, а по названию: у блока его
+    нет и не будет."""
+    if not PROGRAM_DIR.exists():
+        return
+    career = PROGRAM_DIR / CAREER_DIR_NAME
+    if not career.is_dir():
+        return
+
+    part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
+    bracket: tuple[int, int] | None = None
+    mark: str | None = None
+    for line in part61.splitlines():
+        if not line.startswith("|") or CAREER_ROW_MARK not in line:
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        bracket = parse_range(cells[1])
+        found = BY_FACT_RE.search(line)
+        mark = found.group(0) if found else None
+        break
+
+    if bracket is None:
+        fail(
+            f"часть 6.1 blueprint: не найдена строка «{CAREER_ROW_MARK}...» с "
+            f"вилкой часов блока program/{CAREER_DIR_NAME}/"
+        )
+        return
+
+    steps = sorted(
+        f for f in career.glob("step-*.md")
+        if (m := STEP_FILE.match(f.name)) and int(m.group(1)) > 0
+    )
+    pairs: list[tuple[float, float]] = []
+    no_hours: list[str] = []
+    for f in steps:
+        m = STEP_HOURS.search(f.read_text(encoding="utf-8"))
+        if m:
+            low = float(m.group(1))
+            pairs.append((low, float(m.group(2)) if m.group(2) is not None else low))
+        else:
+            no_hours.append(f.name)
+    if no_hours:
+        fail(
+            f"{CAREER_DIR_NAME}: шаги без разбираемой строки 'Время: N{DASH}M ч': "
+            f"{', '.join(no_hours)}"
+        )
+        return
+    if not pairs:
+        ok(f"{CAREER_DIR_NAME}: содержательных шагов с часами не найдено")
+        return
+
+    low = sum(p[0] for p in pairs)
+    high = sum(p[1] for p in pairs)
+    b_low, b_high = bracket
+    label = (
+        f"{CAREER_DIR_NAME}: сумма {len(pairs)} шагов {_fmt(low)}{DASH}{_fmt(high)} ч "
+        f"при вилке 6.1 {b_low}{DASH}{b_high}"
+    )
+    if low == b_low and high == b_high and mark:
+        warn(
+            f"{label} — вилка выставлена по сумме шагов «{mark}», прохождением "
+            f"не подтверждена: калибровать её нечем, пока блок никто не прошёл"
+        )
+    elif low == b_low and high == b_high:
+        warn(
+            f"{label} — совпадение по обеим границам: признак подгонки суммы "
+            f"под вилку, а не подтверждение оценок (решение 24)"
+        )
+    elif mark:
+        warn(
+            f"{label} — вилка помечена «{mark}», но сумма шагов с ней уже "
+            f"расходится: пометка устарела — править вилку или снимать пометку"
+        )
+    elif high < b_low or low > b_high:
+        warn(
+            f"{label} — сумма целиком вне вилки: сначала искать недостающее "
+            f"содержание, потом править вилку в blueprint (решение 24)"
+        )
+    else:
+        ok(label)
+
+
 PART2_TOTAL_ROW = re.compile(r"^Итого (ядро|обвязка)$")
 PART2_HEADING_RANGE = re.compile(rf"(\d+){DASH}(\d+) ч")
 
@@ -1416,6 +1566,8 @@ def main() -> int:
     check_hours(blueprint_text, claude_text)
     check_part2_hours(blueprint_text)
     check_module_hours(blueprint_text)
+    check_career_hours(blueprint_text)
+    check_calibration_count(blueprint_text)
     check_skill_ids(blueprint_text)
     check_step_skill_header()
     check_run_dates()
