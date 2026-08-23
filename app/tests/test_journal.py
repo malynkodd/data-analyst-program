@@ -103,3 +103,50 @@ def test_notes_go_into_stuck_column_one_by_one(journal_copy) -> None:
     stuck = row.split("|")[4]
     assert stuck.count("[сторона]") == 2
     assert "pandas merge" in stuck
+
+
+def test_records_read_the_file_without_touching_it(journal_copy) -> None:
+    """Экран журнала только читает: файл после разбора байт в байт тот же."""
+    before = journal_copy.read_bytes()
+    rows = journal.records(path=journal_copy)
+    assert journal_copy.read_bytes() == before
+
+    assert rows, "раздел «Записи» не разобран"
+    first = rows[0]
+    assert first["parsed"] and first["date"] == "2026-07-29"
+    assert first["plan"] == "—" and first["fact"] == "—"
+
+
+def test_records_see_a_row_written_by_the_app(journal_copy) -> None:
+    journal.append_session(
+        theme="M4.05 подмена источника",
+        plan="6–8",
+        fact_seconds=2 * 3600,
+        stuck="параметр не подхватился",
+        useless=None,
+        notes=["[сторона] ассистент: где живут выражения запросов",
+               "[сторона] вердикт ИИ по критерию 1.5 (не скрипт): задание 13 → не сошлось"],
+        day=date(2026, 8, 24),
+        path=journal_copy,
+    )
+    last = journal.records(path=journal_copy)[-1]
+    assert last["parsed"] and last["date"] == "2026-08-24"
+    assert last["plan"] == "6–8" and last["fact"] == "2"
+    assert last["notes"] == 2, "пометки правила 6 не сосчитаны"
+    assert last["useless"] == "—"
+
+
+def test_hours_folds_a_range_but_keeps_a_number(journal_copy) -> None:
+    assert journal.hours("6–8") == 7.0
+    assert journal.hours("3.75") == 3.75
+    assert journal.hours("2,5") == 2.5
+    assert journal.hours("—") is None
+    assert journal.hours("") is None
+
+
+def test_unparsable_line_is_returned_as_is(tmp_path) -> None:
+    """Журнал ведёт человек: приложение не решает, что его строка неверна."""
+    f = tmp_path / "self.md"
+    f.write_text("## Записи\n\nсвободная заметка без колонок\n", encoding="utf-8")
+    rows = journal.records(path=f)
+    assert rows == [{"raw": "свободная заметка без колонок", "parsed": False}]

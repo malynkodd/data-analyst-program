@@ -26,7 +26,18 @@ BLUEPRINT = ROOT / "design" / "blueprint.md"
 CAREER = "career"
 
 STEP_FILE = re.compile(r"^step-(\d+)\.md$")
-HEADER_FIELD = re.compile(r"^(Умение|Модуль|Требуется до этого|Время):\s*(.*)$")
+
+# Поле шапки — любая строка вида `Ключ: значение` в блоке сразу после
+# заголовка файла. Список ключей закрытым не делается: кроме четырёх
+# основных, шаги объявляют «Новые файлы, объявляемые этим шагом»,
+# «Новые колонки к сквозной схеме модуля», «Блок» и ещё шесть разовых
+# формулировок. Перечисление только знакомых приклеивало бы чужое поле к
+# предыдущему как перенос строки — и «Требуется до этого» уезжало вместе
+# с текстом про колонки схемы.
+HEADER_FIELD = re.compile(r"^([А-ЯЁA-Z][^:]{1,70}):\s*(.*)$")
+
+# Поля, которые интерфейс показывает в шапке шага, в этом порядке.
+HEADER_SHOWN = ("Умение", "Модуль", "Блок", "Требуется до этого", "Время")
 SECTION = re.compile(r"^##\s+(\d+\.\d+)\.\s*(.*)$", re.MULTILINE)
 BACKTICKED = re.compile(r"`([^`]+)`")
 
@@ -100,31 +111,47 @@ def step(module: str, number: int) -> Step:
     return _read_step(module, number, path)
 
 
-def _read_step(module: str, number: int, path: Path) -> Step:
-    text = path.read_text(encoding="utf-8")
+def _split_header(text: str) -> tuple[str, dict[str, str], str]:
+    """Заголовок файла, поля шапки и остальной текст до первого раздела.
+
+    Значение поля может переноситься на следующую строку (`Время:` в M0),
+    поэтому строка без ключа приклеивается к последнему полю; пустая
+    строка перенос заканчивает. Всё, что не поле и не перенос, — преамбула
+    (в декларациях там стоит предупреждение «не шаг для учащегося»).
+    """
     lines = text.splitlines()
-    title = lines[0].lstrip("# ").strip() if lines else path.name
+    title = lines[0].lstrip("# ").strip() if lines else ""
     header: dict[str, str] = {}
-    # Шапка — первые строки до первого раздела `## `. Значение поля может
-    # переноситься на следующую строку (`Время:` в M0), поэтому строка без
-    # двоеточия приклеивается к последнему полю.
-    last = None
+    rest: list[str] = []
+    last: str | None = None
     for line in lines[1:]:
         if line.startswith("## "):
             break
         m = HEADER_FIELD.match(line)
         if m:
             last = m.group(1)
-            header[last] = m.group(2).strip()
-        elif last and line.strip():
-            header[last] = f"{header[last]} {line.strip()}"
+            value = m.group(2).strip()
+            # Поле может стоять дважды: `program/M11/step-04.md` объявляет
+            # `Умение: G2` и `Умение: G3` двумя строками. Перезапись
+            # потеряла бы половину карты умений.
+            header[last] = f"{header[last]}; {value}" if last in header else value
         elif not line.strip():
             last = None
+            rest.append(line)
+        elif last:
+            header[last] = f"{header[last]} {line.strip()}"
+        else:
+            rest.append(line)
+    return title, header, "\n".join(rest).strip()
+
+
+def _read_step(module: str, number: int, path: Path) -> Step:
+    title, header, _ = _split_header(path.read_text(encoding="utf-8"))
     return Step(
         module=module,
         number=number,
         path=path,
-        title=title,
+        title=title or path.name,
         header=header,
         is_declaration=(number == 0),
     )
@@ -447,14 +474,139 @@ def ordered_sections(text: str) -> list[dict]:
 
 
 def preamble(text: str) -> str:
-    """Текст между заголовком файла и первым разделом, без шапки полей."""
-    marks = list(SECTION.finditer(text))
-    head = text[: marks[0].start()] if marks else text
-    lines = head.splitlines()[1:]  # без `# Заголовок`
-    kept = [ln for ln in lines if not HEADER_FIELD.match(ln)]
-    # Строки-продолжения шапки («…калибровка — research/self.md»)
-    # начинаются с отступа и идут сразу за полем; они уже показаны в
-    # шапке интерфейса, повторять их в теле незачем.
-    while kept and (kept[0].startswith(" ") or not kept[0].strip()):
-        kept.pop(0)
-    return "\n".join(kept).strip()
+    """Текст между заголовком файла и первым разделом, без полей шапки."""
+    return _split_header(text)[2]
+
+
+def header_pairs(header: dict[str, str]) -> list[tuple[str, str]]:
+    """Поля шапки для интерфейса: сначала показываемые, остальные следом."""
+    shown = [(k, header[k]) for k in HEADER_SHOWN if k in header]
+    rest = [(k, v) for k, v in header.items() if k not in HEADER_SHOWN]
+    return shown + rest
+
+
+# ----------------------------------------------------- карта умений (36)
+#
+# Часть 1 blueprint — единственное место, где умения определены целиком:
+# «дано → делает → как проверяется». Приложение показывает эту таблицу как
+# карту прогресса, привязывая к каждому ID шаги, объявившие его шапкой
+# `Умение:`. Тот же способ связи, каким пользуется
+# `check_skill_ids()` в `tools/check_consistency.py`.
+
+SKILL_GROUP = re.compile(r"^## ([A-K])\.\s+(.+)$", re.MULTILINE)
+SKILL_ID = re.compile(r"^([A-K]\d)$")
+STEP_SKILL = re.compile(r"\b([A-K]\d)\b")
+
+
+@lru_cache(maxsize=1)
+def _skills_cached(mtime: float) -> tuple[dict, ...]:
+    text = _blueprint_text()
+    part1 = text[text.index("# ЧАСТЬ 1."): text.index("# ЧАСТЬ 2.")]
+    out: list[dict] = []
+    group = group_name = ""
+    for line in part1.splitlines():
+        g = SKILL_GROUP.match(line)
+        if g:
+            group, group_name = g.group(1), g.group(2).strip()
+            continue
+        if not line.startswith("|") or re.match(r"^\|[\s:\-|]+\|?$", line):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 3 or not SKILL_ID.match(cells[0]):
+            continue
+        out.append(
+            {
+                "id": cells[0],
+                "group": group,
+                "group_name": group_name,
+                "statement": cells[1],
+                "check": cells[2],
+            }
+        )
+    return tuple(out)
+
+
+def skills() -> list[dict]:
+    """36 ID умений части 1 blueprint, в порядке файла."""
+    return [dict(s) for s in _skills_cached(BLUEPRINT.stat().st_mtime)]
+
+
+def step_skills(header: dict[str, str]) -> list[str]:
+    """ID умений из шапки `Умение:`; у инфраструктурных шагов — пусто.
+
+    Шапка бывает длинной («A2 (часть 3 из 5 — прямая предпосылка…»), и в
+    пояснении могут стоять другие ID. Берётся только то, что стоит в
+    начале строки, до первой скобки или тире.
+    """
+    raw = header.get("Умение", "").strip()
+    if not raw or raw.startswith("—"):
+        return []
+    # Пояснение в скобках или после тире может называть другие ID
+    # («часть 1 из 5. Часть 5 — step-05.md»), они не в счёт: умение шага —
+    # то, что стоит в начале строки. Полей может быть два (`G2; G3`).
+    head = "; ".join(re.split(r"[(—]", part, maxsplit=1)[0] for part in raw.split(";"))
+    return list(dict.fromkeys(m.group(1) for m in STEP_SKILL.finditer(head)))
+
+
+def skill_map() -> dict[str, list[str]]:
+    """ID умения → шаги, которые его объявили."""
+    out: dict[str, list[str]] = {}
+    for module in modules():
+        for st in steps(module):
+            for sid in step_skills(st.header):
+                out.setdefault(sid, []).append(st.step_id)
+    return out
+
+
+# ------------------------------------------------------- предусловия шага
+
+STEP_REF_FULL = re.compile(r"(?:program[/\\])?([MP]\d+|career)[/\\]step-(\d+)\.md")
+STEP_REF_LOCAL = re.compile(r"(?<![/\\])\bstep-(\d+)\.md")
+STEP_REF_DOT = re.compile(r"\b([MP]\d+)\.(\d+)\b")
+MODULE_REF = re.compile(r"\b([MP]\d+)\b")
+
+
+def prerequisites(module: str, header: dict[str, str]) -> dict:
+    """Что шапка `Требуется до этого:` называет предусловием.
+
+    Формат в шагах не один: `step-01.md` (этого же модуля),
+    `M0/step-03.md`, `M1.1`, «M3 целиком», «M2 (таблицы)». Разбираются все
+    пять; результат — подсказка в интерфейсе, а не запрет: шаг открывается
+    в любом случае, программа не блокирует читателя своими догадками.
+    """
+    raw = header.get("Требуется до этого", "")
+    if not raw:
+        return {"raw": "", "steps": [], "modules": []}
+
+    step_ids: list[str] = []
+    for m in STEP_REF_FULL.finditer(raw):
+        step_ids.append(f"{m.group(1)}/step-{int(m.group(2)):02d}")
+    text_wo_full = STEP_REF_FULL.sub(" ", raw)
+    for m in STEP_REF_LOCAL.finditer(text_wo_full):
+        step_ids.append(f"{module}/step-{int(m.group(1)):02d}")
+    for m in STEP_REF_DOT.finditer(text_wo_full):
+        step_ids.append(f"{m.group(1)}/step-{int(m.group(2)):02d}")
+
+    # Диапазон «пройдены P1–P6» перечисляет шесть проектов, а не два.
+    text_wo_full = re.sub(
+        r"\b([MP])(\d+)\s*[–—-]\s*(?:[MP])?(\d+)\b",
+        lambda m: " ".join(f"{m.group(1)}{i}" for i in range(int(m.group(2)), int(m.group(3)) + 1)),
+        text_wo_full,
+    )
+
+    named_modules = {sid.split("/")[0] for sid in step_ids}
+    mods = [
+        m.group(1)
+        for m in MODULE_REF.finditer(STEP_REF_DOT.sub(" ", text_wo_full))
+        if m.group(1) != module and m.group(1) not in named_modules
+    ]
+
+    seen: set[str] = set()
+    step_ids = [s for s in step_ids if not (s in seen or seen.add(s)) and _step_exists(s)]
+    mods = [m for m in dict.fromkeys(mods) if (PROGRAM / m).is_dir()]
+    return {"raw": raw, "steps": step_ids, "modules": mods}
+
+
+def _step_exists(step_id: str) -> bool:
+    mod, _, name = step_id.partition("/")
+    return (PROGRAM / mod / f"{name}.md").is_file()

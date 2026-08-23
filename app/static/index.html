@@ -14,6 +14,11 @@
     <b>Data Analyst Program</b>
     <span class="sub">от нуля до первой оплачиваемой работы аналитиком</span>
   </div>
+  <nav class="topnav">
+    <button data-screen="home" class="active">Программа</button>
+    <button data-screen="skills">Умения</button>
+    <button data-screen="journal">Журнал</button>
+  </nav>
   <div class="top-right">
     <div class="progress" title="закрытых шагов из содержательных">
       <div class="bar"><i id="top-bar"></i></div>
@@ -95,6 +100,7 @@
     <h1 id="step-title"></h1>
     <div id="step-chips" class="chips"></div>
     <div id="deferred"></div>
+    <div id="prereq"></div>
     <div id="preamble" class="preamble"></div>
 
     <div class="action-bar" id="session">
@@ -133,11 +139,54 @@
       </div>
     </div>
     <pre id="journal-tail" hidden></pre>
+    <div id="whats-next" class="next-card" hidden></div>
 
     <nav id="toc" class="toc"></nav>
     <div id="sections"></div>
 
     <nav class="step-nav" id="step-nav"></nav>
+  </section>
+
+  <!-- ЭКРАН МОДУЛЯ -->
+  <section id="module-body" hidden>
+    <nav class="crumbs" id="mod-crumbs"></nav>
+    <h1 id="mod-title"></h1>
+    <div id="mod-chips" class="chips"></div>
+    <div id="mod-deferred"></div>
+    <div id="mod-next" class="next-card"></div>
+    <h2>Шаги модуля</h2>
+    <div id="mod-steps" class="modsteps"></div>
+    <h2>Какие умения закрывает</h2>
+    <p class="hint">Формулировки — из части 1 <code>design/blueprint.md</code>:
+      «дано → делает → как проверяется». Ни одного «понимает» и «знает».</p>
+    <div id="mod-skills"></div>
+    <h2>Справка модуля</h2>
+    <p class="hint">Это <code>step-00.md</code> — файл, который объявляет датасет,
+      схему и предусловие модуля до первого шага. Читать его целиком не обязательно.</p>
+    <details id="mod-decl-wrap"><summary>Показать справку</summary>
+      <div id="mod-decl" class="md"></div></details>
+  </section>
+
+  <!-- ЭКРАН УМЕНИЙ -->
+  <section id="skills-body" hidden>
+    <h1>Карта умений</h1>
+    <p class="lead">36 проверяемых умений — то, ради чего программа существует.
+      Каждое сформулировано как «дано → делает → как проверяется»; умение считается
+      закрытым, когда закрыты все шаги, которые его объявили.</p>
+    <div id="skills-progress" class="next-card"></div>
+    <div id="skills-list"></div>
+  </section>
+
+  <!-- ЭКРАН ЖУРНАЛА -->
+  <section id="journal-body" hidden>
+    <h1>Журнал прохождения</h1>
+    <p class="lead">Файл <code>research/self.md</code> — единственное, что приложение
+      пишет. По нему потом чинятся оценки часов всей программы: 17 из 24 вилок в
+      проекте стоят с пометкой «требуется калибровка», и снять её может только замер
+      фактического времени.</p>
+    <div id="journal-summary" class="cards"></div>
+    <h2>Записи</h2>
+    <div id="journal-records"></div>
   </section>
 </main>
 

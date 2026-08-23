@@ -163,6 +163,48 @@ def api_tree():
     )
 
 
+def _prereq_status(module: str, header: dict) -> dict:
+    """Предусловие шага и то, закрыто ли оно по отметкам приложения.
+
+    Подсказка, а не запрет: шаг открывается в любом случае. Приложение не
+    знает, что читатель делал вне его — отметка «закончил» ставится
+    руками, и её отсутствие означает «не отмечено», а не «не сделано».
+    """
+    pre = repo.prerequisites(module, header)
+    states = state.all_states()
+    steps_out = []
+    for sid in pre["steps"]:
+        mod, _, name = sid.partition("/")
+        num = int(name.replace("step-", ""))
+        try:
+            title = _short_title(mod, num, repo.step(mod, num).title)
+        except FileNotFoundError:
+            continue
+        steps_out.append(
+            {
+                "step_id": sid,
+                "module": mod,
+                "number": num,
+                "title": title,
+                "done": states.get(sid, {}).get("status") == state.DONE,
+                "declaration": num == 0,
+            }
+        )
+    mods_out = []
+    for code in pre["modules"]:
+        items = [s for s in repo.steps(code) if not s.is_declaration]
+        done = sum(1 for s in items if states.get(s.step_id, {}).get("status") == state.DONE)
+        mods_out.append(
+            {
+                "module": code,
+                "name": repo.catalog().get(code, {}).get("name", ""),
+                "done": done,
+                "total": len(items),
+            }
+        )
+    return {"raw": pre["raw"], "steps": steps_out, "modules": mods_out}
+
+
 def _neighbours(module: str, number: int) -> dict:
     """Предыдущий и следующий шаг — внутри модуля, затем по этапам."""
     order = repo.stage_order()
@@ -216,6 +258,7 @@ def api_step(module: str, number: int):
             "code": f"{module}.{number:02d}",
             "rel_path": st.rel_path,
             "header": st.header,
+            "header_pairs": repo.header_pairs(st.header),
             "plan_hours": repo.plan_hours(st.header),
             "declaration": st.is_declaration,
             "preamble_html": _render(repo.preamble(text)),
@@ -223,8 +266,120 @@ def api_step(module: str, number: int):
             "checks": [{"index": c.index, "raw": c.raw, "cwd": c.cwd} for c in checks],
             "deferred": repo.deferred_for(module, number),
             "has_criterion": "1.5" in secs,
+            "skills": repo.step_skills(st.header),
+            "prerequisites": _prereq_status(module, st.header),
             "state": state.get(st.step_id),
             **_neighbours(module, number),
+        }
+    )
+
+
+@app.get("/api/module/<module>")
+def api_module(module: str):
+    """Экран модуля: о чём он, какие умения, чем закончится.
+
+    Всё берётся из его собственной декларации `step-00.md` — файла,
+    который скилл `curriculum-design` требует писать до первого шага
+    ровно с этим содержанием. В дереве он подписан «служебное», потому
+    что это не шаг учащегося; но как справка о модуле он и написан.
+    """
+    if not (repo.PROGRAM / module).is_dir():
+        return jsonify({"error": f"нет модуля {module}"}), 404
+    states = state.all_states()
+    block = _module_block(module, states)
+    meta = repo.catalog().get(module, {})
+
+    decl_html = ""
+    try:
+        decl = repo.step(module, 0)
+        decl_html = _render(decl.path.read_text(encoding="utf-8").split("\n", 1)[1])
+    except FileNotFoundError:
+        pass
+
+    ids: list[str] = []
+    for st in repo.steps(module):
+        for sid in repo.step_skills(st.header):
+            if sid not in ids:
+                ids.append(sid)
+    by_id = {s["id"]: s for s in repo.skills()}
+    stage = next((s for s in repo.stages() if module in s["codes"]), None)
+
+    return jsonify(
+        {
+            "module": module,
+            "name": meta.get("name", ""),
+            "hours": meta.get("hours", ""),
+            "kind": block["kind"],
+            "stage": {"number": stage["number"], "name": stage["name"]} if stage else None,
+            "declaration_html": decl_html,
+            "has_declaration": bool(decl_html),
+            "steps": block["steps"],
+            "done": block["done"],
+            "total": block["total"],
+            "skills": [by_id[i] for i in ids if i in by_id],
+            "deferred": repo.deferred_for(module),
+        }
+    )
+
+
+@app.get("/api/skills")
+def api_skills():
+    """Карта 36 умений части 1 blueprint с отметками закрытых."""
+    states = state.all_states()
+    mapping = repo.skill_map()
+    titles = {}
+    for module in repo.modules():
+        for st in repo.steps(module):
+            titles[st.step_id] = _short_title(module, st.number, st.title)
+
+    groups: list[dict] = []
+    for skill in repo.skills():
+        step_ids = mapping.get(skill["id"], [])
+        items = [
+            {
+                "step_id": sid,
+                "title": titles.get(sid, sid),
+                "done": states.get(sid, {}).get("status") == state.DONE,
+            }
+            for sid in step_ids
+        ]
+        row = dict(skill, steps=items, done=bool(items) and all(i["done"] for i in items))
+        if not groups or groups[-1]["group"] != skill["group"]:
+            groups.append({"group": skill["group"], "name": skill["group_name"], "skills": []})
+        groups[-1]["skills"].append(row)
+
+    total = sum(len(g["skills"]) for g in groups)
+    done = sum(1 for g in groups for s in g["skills"] if s["done"])
+    return jsonify({"groups": groups, "total": total, "done": done})
+
+
+@app.get("/api/journal")
+def api_journal():
+    """Экран журнала: что уже записано в `research/self.md`.
+
+    Только чтение и только сложение того, что записал человек. Строку с
+    неразобранным форматом приложение показывает как есть — файл ведёт он,
+    а не оно.
+    """
+    rows = journal.records()
+    plan = fact = 0.0
+    counted = 0
+    for r in rows:
+        if not r.get("parsed"):
+            continue
+        p, f = journal.hours(r["plan"]), journal.hours(r["fact"])
+        if p is not None and f is not None:
+            plan += p
+            fact += f
+            counted += 1
+    return jsonify(
+        {
+            "records": rows,
+            "sum_plan": round(plan, 2),
+            "sum_fact": round(fact, 2),
+            "counted": counted,
+            "notes": sum(r.get("notes", 0) for r in rows if r.get("parsed")),
+            "path": "research/self.md",
         }
     )
 

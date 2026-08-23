@@ -71,3 +71,65 @@ def test_preamble_drops_header_fields_but_keeps_warnings() -> None:
     pre = repo.preamble(repo.step_text("M4", 0))
     assert "Умение:" not in pre and "Время:" not in pre
     assert "Не шаг для учащегося" in pre  # предупреждение декларации осталось
+
+
+def test_header_fields_do_not_bleed_into_each_other() -> None:
+    """Чужое поле — не перенос строки предыдущего.
+
+    Шапка шага содержит не только четыре знакомых поля: `program/M4/step-05.md`
+    объявляет ещё «Новые колонки к сквозной схеме модуля». Пока разбор знал
+    только знакомые ключи, этот текст приклеивался к «Требуется до этого» —
+    и подсказка о предусловии показывала абзац про схему датасета.
+    """
+    header = repo.step("M4", 5).header
+    assert header["Требуется до этого"].endswith("сошлись с эталонами)")
+    assert "Новые колонки" not in header["Требуется до этого"]
+    assert header["Новые колонки к сквозной схеме модуля"].startswith("нет.")
+    assert header["Время"] == "6–8 ч"
+
+
+def test_repeated_field_is_kept_whole() -> None:
+    """`program/M11/step-04.md` объявляет `Умение: G2` и `Умение: G3`."""
+    header = repo.step("M11", 4).header
+    assert repo.step_skills(header) == ["G2", "G3"]
+
+
+def test_every_one_of_36_skills_is_closed_by_a_step() -> None:
+    """Та же связь, которую сторожит check_skill_ids() репозитория."""
+    mapping = repo.skill_map()
+    missing = [s["id"] for s in repo.skills() if s["id"] not in mapping]
+    assert not missing, f"умения без единого шага: {missing}"
+    assert len(repo.skills()) == 36
+
+
+def test_skill_statement_comes_from_blueprint() -> None:
+    c2 = next(s for s in repo.skills() if s["id"] == "C2")
+    assert c2["group"] == "C"
+    assert c2["statement"].startswith("Power Query")
+    assert "Refresh" in c2["check"]
+
+
+def test_skill_id_is_taken_from_the_head_of_the_field() -> None:
+    """Пояснение шапки называет чужие ID — они не считаются умением шага."""
+    header = repo.step("M3", 2).header
+    assert "часть" in header["Умение"], "взят не тот шаг: пояснения в шапке нет"
+    assert repo.step_skills(header) == ["A2"]
+
+
+def test_prerequisites_are_parsed_in_all_five_shapes() -> None:
+    def pre(module: str, number: int) -> dict:
+        return repo.prerequisites(module, repo.step(module, number).header)
+
+    assert pre("M4", 5)["steps"] == ["M4/step-04"]          # `step-04.md`
+    assert "M0/step-03" in pre("M10", 1)["steps"] or pre("M10", 1)["modules"]
+    assert "M5" in pre("M6", 1)["modules"]                   # «M5 целиком»
+    career = pre("career", 1)
+    assert career["modules"] == ["P1", "P2", "P3", "P4", "P5", "P6"], "диапазон P1–P6 не развёрнут"
+
+
+def test_prerequisites_never_point_at_a_missing_file() -> None:
+    for module in repo.modules():
+        for st in repo.steps(module):
+            for sid in repo.prerequisites(module, st.header)["steps"]:
+                mod, _, name = sid.partition("/")
+                assert (repo.PROGRAM / mod / f"{name}.md").is_file(), f"{st.step_id} → {sid}"

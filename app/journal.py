@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date as _date
 from pathlib import Path
 
@@ -127,3 +128,59 @@ def tail(lines: int = 12, path: Path | None = None) -> list[str]:
     """Последние строки журнала — подтверждение записи в интерфейсе."""
     target = path or SELF_MD
     return target.read_text(encoding="utf-8").splitlines()[-lines:]
+
+
+RECORDS_HEADING = "## Записи"
+
+
+def records(path: Path | None = None) -> list[dict]:
+    """Строки раздела «Записи» — только чтение, для экрана журнала.
+
+    Разбор нужен, чтобы показать план против факта; сам файл при этом не
+    меняется и не переписывается. Строка, не разбирающаяся на шесть полей,
+    отдаётся как есть — файл ведёт человек, и приложение не вправе решать,
+    что его запись неправильная.
+    """
+    target = path or SELF_MD
+    text = target.read_text(encoding="utf-8")
+    if RECORDS_HEADING not in text:
+        return []
+    body = text.split(RECORDS_HEADING, 1)[1]
+    out: list[dict] = []
+    for line in body.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) != 6:
+            out.append({"raw": line, "parsed": False})
+            continue
+        out.append(
+            {
+                "raw": line,
+                "parsed": True,
+                "date": parts[0],
+                "theme": parts[1],
+                "plan": parts[2],
+                "fact": parts[3],
+                "stuck": parts[4],
+                "useless": parts[5],
+                "notes": parts[4].count("[сторона]"),
+            }
+        )
+    return out
+
+
+def hours(value: str) -> float | None:
+    """`3.75` → 3.75; `6–8` → среднее; `—` → None.
+
+    Середина вилки — не «настоящий план», а способ сложить столбец. Там,
+    где это важно, интерфейс показывает саму вилку, а не это число.
+    """
+    value = (value or "").strip().replace(",", ".")
+    if not value or value == EMPTY:
+        return None
+    nums = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", value)]
+    if not nums:
+        return None
+    return sum(nums) / len(nums)

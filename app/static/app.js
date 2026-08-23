@@ -24,6 +24,18 @@ const esc = (s) => String(s == null ? "" : s)
 
 const STATUS_TEXT = { not_started: "не начат", running: "идёт", paused: "пауза", done: "закончен" };
 
+/* Экраны: показан ровно один. Скрытие — только атрибутом `hidden`
+   (в CSS он объявлен сильнее любого display). */
+const SCREENS = ["home", "step-body", "module-body", "skills-body", "journal-body"];
+const NAV_OF = { home: "home", "skills-body": "skills", "journal-body": "journal" };
+
+function showScreen(id) {
+  SCREENS.forEach((s) => { $(s).hidden = s !== id; });
+  document.querySelectorAll(".topnav button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.screen === NAV_OF[id]));
+  $("step").scrollTop = 0;
+}
+
 /* ==================================================================
    ДЕРЕВО — порядок прохождения по шести этапам части 6.2 blueprint
    ================================================================== */
@@ -90,7 +102,10 @@ function renderTree() {
         a.onclick = () => openStep(st.module, st.number);
         list.appendChild(a);
       }
-      m.querySelector(".mod-head").onclick = () => { list.hidden = !list.hidden; };
+      m.querySelector(".mod-head").onclick = () => {
+        list.hidden = false;
+        openModule(mod.module);
+      };
       m.appendChild(list);
       el.appendChild(m);
     }
@@ -147,6 +162,135 @@ function renderHome() {
 }
 
 /* ==================================================================
+   ЭКРАН МОДУЛЯ — из его же step-00.md
+   ================================================================== */
+
+let currentModule = null;
+
+async function openModule(code) {
+  currentModule = await api(`/api/module/${code}`);
+  const m = currentModule;
+  showScreen("module-body");
+
+  $("mod-crumbs").innerHTML = m.stage
+    ? `Этап ${m.stage.number} · <b>${esc(m.stage.name)}</b> · ${esc(m.kind)}`
+    : esc(m.kind);
+  $("mod-title").textContent = `${m.module} — ${m.name}`;
+  $("mod-chips").innerHTML =
+    `<span class="chip strong">⏱ ${esc(m.hours)} ч на весь ${esc(m.kind)}</span>` +
+    `<span class="chip">${m.total} шаг${m.total === 1 ? "" : "ов"}, закрыто ${m.done}</span>` +
+    (m.skills.length ? `<span class="chip">умения: ${m.skills.map((s) => esc(s.id)).join(", ")}</span>` : "");
+
+  $("mod-deferred").innerHTML = m.deferred.map((d) => `
+    <div class="deferred-row">
+      <div class="head">△ ${esc(d.section)}</div>
+      <div>${esc(d.what)}</div>
+      <div class="warn">Эти шаги делаются руками в настоящем приложении. Вердикт ИИ их не заменяет.</div>
+    </div>`).join("");
+
+  const nextStep = m.steps.find((st) => !st.declaration && st.status !== "done");
+  $("mod-next").hidden = !nextStep;
+  if (nextStep) {
+    $("mod-next").innerHTML =
+      `<div class="label">${m.done ? "Продолжить" : "Начать"} ${esc(m.module)}</div>
+       <h3>${String(nextStep.number).padStart(2, "0")}. ${esc(nextStep.title)}</h3>
+       <div class="meta">${esc(nextStep.plan_hours)} ч по плану${nextStep.skill ? " · умение " + esc(nextStep.skill.split(/[(—;]/)[0].trim()) : ""}</div>
+       <button class="primary" id="mod-go">Открыть шаг</button>`;
+    $("mod-go").onclick = () => openStep(m.module, nextStep.number);
+  }
+
+  $("mod-steps").innerHTML = m.steps.map((st) => `
+    <div class="modstep ${st.declaration ? "decl" : ""} ${st.status === "done" ? "done" : ""}"
+         data-n="${st.number}">
+      <span class="n">${st.declaration ? "—" : String(st.number).padStart(2, "0")}</span>
+      <span class="t">${esc(st.declaration ? "Справка модуля: датасет, схема, предусловие" : st.title)}</span>
+      <span class="meta">${st.declaration ? "служебное" : esc(st.plan_hours) + " ч"}
+        ${st.has_checks ? " ▣" : ""}${st.deferred ? " △" : ""}
+        ${st.status === "done" ? " ✓" : ""}</span>
+    </div>`).join("");
+  $("mod-steps").querySelectorAll(".modstep").forEach((el) => {
+    el.onclick = () => openStep(m.module, Number(el.dataset.n));
+  });
+
+  $("mod-skills").innerHTML = m.skills.length
+    ? m.skills.map((sk) => skillCard(sk, [])).join("")
+    : '<p class="hint">Инфраструктурный блок: своих умений части 1 blueprint у него нет.</p>';
+
+  $("mod-decl").innerHTML = m.declaration_html;
+  $("mod-decl-wrap").hidden = !m.has_declaration;
+  renderTree();
+}
+
+/* ==================================================================
+   КАРТА УМЕНИЙ
+   ================================================================== */
+
+function skillCard(sk, steps) {
+  const links = (steps || []).map((st) =>
+    `<a data-step="${esc(st.step_id)}" class="${st.done ? "done" : ""}">${esc(st.step_id)}${st.done ? " ✓" : ""}</a>`).join("");
+  return `<div class="skill ${sk.done ? "done" : ""}">
+    <div><span class="id">${esc(sk.id)}</span><span class="st">${esc(sk.statement)}</span></div>
+    <div class="how"><b>Как проверяется:</b> ${esc(sk.check)}</div>
+    ${links ? `<div class="steps">${links}</div>` : ""}
+  </div>`;
+}
+
+async function openSkills() {
+  const d = await api("/api/skills");
+  showScreen("skills-body");
+  $("skills-progress").innerHTML =
+    `<div class="label">Закрыто умений</div><h3>${d.done} из ${d.total}</h3>
+     <div class="meta">Умение закрыто, когда закрыты все шаги, которые его объявили.
+       Отметку «закончил» ставите вы — приложение не знает, что сделано вне его.</div>`;
+  $("skills-list").innerHTML = d.groups.map((g) => `
+    <div class="skgroup">
+      <h3>${esc(g.group)}. ${esc(g.name)}</h3>
+      ${g.skills.map((sk) => skillCard(sk, sk.steps)).join("")}
+    </div>`).join("");
+  bindStepLinks($("skills-list"));
+}
+
+function bindStepLinks(root) {
+  root.querySelectorAll("a[data-step]").forEach((a) => {
+    a.onclick = () => {
+      const [mod, name] = a.dataset.step.split("/");
+      openStep(mod, Number(name.replace("step-", "")));
+    };
+  });
+}
+
+/* ==================================================================
+   ЖУРНАЛ
+   ================================================================== */
+
+async function openJournal() {
+  const d = await api("/api/journal");
+  showScreen("journal-body");
+  const real = d.records.filter((r) => r.parsed);
+  $("journal-summary").innerHTML = `
+    <div class="card"><h3>Записей</h3><span class="big">${real.length}</span>
+      <p>строк в <code>${esc(d.path)}</code></p></div>
+    <div class="card"><h3>План против факта</h3>
+      <span class="big">${d.sum_fact} / ${d.sum_plan} ч</span>
+      <p>по ${d.counted} записям, где заполнены оба поля. План — середина вилки шага,
+         поэтому это ориентир, а не приговор оценке.</p></div>
+    <div class="card"><h3>Обращений к стороне</h3><span class="big">${d.notes}</span>
+      <p>пометок <code>[сторона]</code>. Больше одной на шаг — признак, что теории
+         в шаге не хватает (решение 28).</p></div>`;
+
+  $("journal-records").innerHTML = real.length
+    ? `<table class="journal">
+        <tr><th>Дата</th><th>Тема</th><th>План</th><th>Факт</th><th>Где застрял</th><th>Что оказалось лишним</th></tr>
+        ${d.records.map((r) => r.parsed
+          ? `<tr><td class="num">${esc(r.date)}</td><td>${esc(r.theme)}</td>
+             <td class="num">${esc(r.plan)}</td><td class="num">${esc(r.fact)}</td>
+             <td>${esc(r.stuck)}</td><td>${esc(r.useless)}</td></tr>`
+          : `<tr><td colspan="6"><code>${esc(r.raw)}</code></td></tr>`).join("")}
+      </table>`
+    : '<p class="hint">Записей пока нет. Первая появится, когда вы закроете первый шаг.</p>';
+}
+
+/* ==================================================================
    ШАГ
    ================================================================== */
 
@@ -154,9 +298,7 @@ async function openStep(module, number) {
   current = await api(`/api/step/${module}/${number}`);
   chatHistory = [];
   $("chat-log").innerHTML = "";
-  $("home").hidden = true;
-  $("step-body").hidden = false;
-  $("step").scrollTop = 0;
+  showScreen("step-body");
 
   $("crumbs").innerHTML =
     `<b>${esc(current.module)}</b> ${esc(current.module_name)}` +
@@ -186,6 +328,9 @@ async function openStep(module, number) {
         но не то, что вы действительно построили.</div>
     </div>`).join("");
 
+  $("whats-next").hidden = true;
+  $("journal-tail").hidden = true;
+  renderPrereq();
   $("preamble").innerHTML = current.preamble_html ? `<div class="md">${current.preamble_html}</div>` : "";
   $("preamble").hidden = !current.preamble_html;
 
@@ -194,6 +339,33 @@ async function openStep(module, number) {
   renderSuggestions();
   applyState(current.state);
   renderTree();
+}
+
+function renderPrereq() {
+  const p = current.prerequisites;
+  const box = $("prereq");
+  const items = [...p.steps.filter((x) => !x.declaration), ...p.modules];
+  if (!p.raw || !items.length) {
+    box.innerHTML = "";
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const open = items.filter((x) => x.step_id ? !x.done : x.done < x.total);
+  const link = (x) => x.step_id
+    ? `<a data-step="${esc(x.step_id)}">${esc(x.step_id)} — ${esc(x.title)}</a>${x.done ? " ✓" : ""}`
+    : `<a data-module="${esc(x.module)}">${esc(x.module)} ${esc(x.name)}</a> — закрыто ${x.done} из ${x.total}`;
+  box.innerHTML = `<div class="prereq ${open.length ? "" : "ok"}">
+      <b>${open.length
+        ? "До этого шага в программе идёт то, что ещё не отмечено закрытым:"
+        : "Всё, что нужно до этого шага, отмечено закрытым."}</b>
+      ${items.map((x) => "· " + link(x)).join("<br>")}
+      ${open.length ? '<div class="hint">Это подсказка, а не запрет: отметки ставите вы, и приложение не знает, что вы делали вне его. Шаг открывается в любом случае.</div>' : ""}
+    </div>`;
+  bindStepLinks(box);
+  box.querySelectorAll("a[data-module]").forEach((a) => {
+    a.onclick = () => openModule(a.dataset.module);
+  });
 }
 
 function renderSections() {
@@ -423,12 +595,27 @@ $("btn-write").onclick = async () => {
     $("f-useless").value = "";
     applyState(r.state);
     await loadTree(true);
+    showWhatsNext();
   } catch (e) {
     alert("Не записалось: " + e.message);
   } finally {
     btn.disabled = false;
   }
 };
+
+function showWhatsNext() {
+  const box = $("whats-next");
+  const n = tree && tree.next_step;
+  if (!n) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="label">Шаг закрыт. Дальше</div>
+     <h3>${esc(n.module)}.${String(n.number).padStart(2, "0")} — ${esc(n.title)}</h3>
+     <div class="meta">${esc(n.module_name)} · этап «${esc(n.stage)}» · ${esc(n.plan_hours)} ч</div>
+     <button class="primary" id="next-go">Открыть следующий шаг</button>`;
+  $("next-go").onclick = () => openStep(n.module, n.number);
+  box.scrollIntoView?.({ behavior: "smooth", block: "center" });
+}
 
 /* ==================================================================
    АССИСТЕНТ
@@ -479,14 +666,17 @@ $("chat-input").onkeydown = (e) => {
    ПОМОЩЬ
    ================================================================== */
 
-$("brand").onclick = () => {
-  $("step-body").hidden = true;
-  $("home").hidden = false;
+function openHome() {
   current = null;
+  showScreen("home");
   highlightActive();
   renderTree();
-  $("step").scrollTop = 0;
-};
+}
+
+$("brand").onclick = openHome;
+document.querySelectorAll(".topnav button").forEach((b) => {
+  b.onclick = () => ({ home: openHome, skills: openSkills, journal: openJournal })[b.dataset.screen]();
+});
 
 const closeHelp = () => { $("help").hidden = true; };
 $("btn-help").onclick = () => { $("help").hidden = false; };

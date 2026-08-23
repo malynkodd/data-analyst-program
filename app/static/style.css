@@ -268,3 +268,61 @@ pre.out .fail { color: #ff9090; font-weight: 700; }
 @media (max-width: 1200px) {
   body { grid-template-columns: 250px minmax(0, 1fr) 300px; }
 }
+
+/* ------------------------------------------------- навигация в шапке */
+
+.topnav { display: flex; gap: 4px; }
+.topnav button { border: none; background: none; color: var(--ink-soft);
+                 padding: 6px 12px; border-radius: 6px; font-size: 13.5px; }
+.topnav button:hover { background: #ececea; }
+.topnav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+/* ------------------------------------------------------ экран модуля */
+
+.modsteps { display: flex; flex-direction: column; gap: 6px; }
+.modstep { display: flex; gap: 12px; align-items: baseline; padding: 10px 12px;
+           border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
+.modstep:hover { background: var(--bg-soft); }
+.modstep.done { border-color: #b9dfc6; background: var(--ok-soft); }
+.modstep.decl { opacity: .6; }
+.modstep .n { font-variant-numeric: tabular-nums; color: var(--ink-soft); font-size: 12.5px; min-width: 22px; }
+.modstep .t { flex: 1; font-size: 14px; }
+.modstep .meta { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+
+#mod-decl-wrap summary { cursor: pointer; color: var(--accent); font-size: 13.5px; padding: 6px 0; }
+#mod-decl { border: 1px solid var(--line); border-radius: 8px; padding: 6px 16px; margin-top: 8px; }
+
+/* ------------------------------------------------------ карта умений */
+
+.skgroup { margin-bottom: 20px; }
+.skgroup h3 { font-size: 13px; color: var(--accent); text-transform: none;
+              letter-spacing: 0; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+.skill { border: 1px solid var(--line); border-left: 4px solid var(--line-strong);
+         border-radius: 0 7px 7px 0; padding: 10px 13px; margin-bottom: 8px; }
+.skill.done { border-left-color: var(--ok); background: var(--ok-soft); }
+.skill .id { font-weight: 700; font-size: 13px; margin-right: 8px; }
+.skill .st { font-size: 14px; }
+.skill .how { font-size: 12.5px; color: var(--ink-soft); margin-top: 5px; }
+.skill .how b { color: var(--ink); font-weight: 600; }
+.skill .steps { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
+.skill .steps a { font-size: 12px; text-decoration: none; color: var(--accent);
+                  border: 1px solid var(--line); border-radius: 20px; padding: 2px 9px; background: #fff; cursor: pointer; }
+.skill .steps a.done { border-color: var(--ok); color: var(--ok); }
+
+/* ------------------------------------------------------ экран журнала */
+
+table.journal { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.journal th, table.journal td { border: 1px solid var(--line); padding: 6px 8px;
+                                     text-align: left; vertical-align: top; }
+table.journal th { background: var(--bg-soft); font-size: 12px; }
+table.journal td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.card .big { font-size: 26px; font-weight: 700; color: var(--ink); display: block; line-height: 1.2; }
+
+/* ------------------------------------------------- предусловие шага */
+
+.prereq { border: 1px solid var(--line); border-left: 4px solid var(--warn);
+          background: var(--warn-soft); border-radius: 0 7px 7px 0;
+          padding: 9px 12px; margin-bottom: 12px; font-size: 13px; }
+.prereq.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+.prereq b { display: block; margin-bottom: 3px; }
+.prereq a { color: var(--accent); cursor: pointer; text-decoration: underline; }
