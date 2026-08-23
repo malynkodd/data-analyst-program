@@ -17,6 +17,7 @@ import csv
 import hashlib
 import statistics
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -95,8 +96,9 @@ def main() -> int:
     # --- Курс USD/UAH: среднее за период выгрузки контрактов, для контекста ---
     rates = [float(r["rate"]) for r in usd]
     avg_rate = round(statistics.mean(rates), 4)
-    first_rate = float(usd[-1]["rate"])  # файл по убыванию даты
-    last_rate = float(usd[0]["rate"])
+    usd_sorted = sorted(usd, key=lambda r: datetime.strptime(r["date"], "%d.%m.%Y"))
+    first_rate = float(usd_sorted[0]["rate"])
+    last_rate = float(usd_sorted[-1]["rate"])
 
     # --- Топ-10 поставщиков по сумме контрактов ---
     supplier_sum: dict[str, float] = {}
