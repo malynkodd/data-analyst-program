@@ -17,6 +17,14 @@
 
 * { box-sizing: border-box; }
 
+/* Атрибут `hidden` сильнее любого авторского `display`.
+   Без этой строки `.modal { display: flex }` и `.toc { display: flex }`
+   перебивают браузерное `[hidden] { display: none }` — окно приветствия
+   перестаёт закрываться, а пустое оглавление остаётся на экране.
+   Показ/скрытие в приложении делается только атрибутом `hidden`, поэтому
+   правило одно и общее. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   display: grid;

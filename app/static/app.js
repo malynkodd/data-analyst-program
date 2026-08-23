@@ -5,7 +5,7 @@ let current = null;      // ответ /api/step для открытого ша�
 let timerHandle = null;
 let elapsedBase = 0;
 let runningSince = null;
-let history = [];        // история чата — только в памяти вкладки
+let chatHistory = [];    // история чата — только в памяти вкладки
 
 const $ = (id) => document.getElementById(id);
 
@@ -152,7 +152,7 @@ function renderHome() {
 
 async function openStep(module, number) {
   current = await api(`/api/step/${module}/${number}`);
-  history = [];
+  chatHistory = [];
   $("chat-log").innerHTML = "";
   $("home").hidden = true;
   $("step-body").hidden = false;
@@ -170,7 +170,11 @@ async function openStep(module, number) {
   if (h["Умение"]) chips.push(`<span class="chip">умение ${esc(h["Умение"])}</span>`);
   if (current.checks.length) chips.push(`<span class="chip">▣ проверяется скриптом</span>`);
   if (current.deferred.length) chips.push(`<span class="chip">△ нужен ручной прогон</span>`);
-  if (h["Требуется до этого"]) chips.push(`<span class="chip">до этого: ${esc(h["Требуется до этого"].slice(0, 70))}</span>`);
+  if (h["Требуется до этого"]) {
+    const need = h["Требуется до этого"].replace(/`/g, "");
+    const short = need.length > 70 ? need.slice(0, 70).trimEnd() + "…" : need;
+    chips.push(`<span class="chip" title="${esc(need)}">до этого: ${esc(short)}</span>`);
+  }
   $("step-chips").innerHTML = chips.join("");
 
   $("deferred").innerHTML = current.deferred.map((d) => `
@@ -399,7 +403,7 @@ $("btn-finish").onclick = () => {
        об обращениях к ассистенту:<br>${notes.map((n) => `<code>${esc(n)}</code>`).join("<br>")}</p>`
     : `<p class="hint">Обращений к ассистенту за сессию не было — в журнале это тоже факт.</p>`;
   $("finish-form").hidden = false;
-  $("finish-form").scrollIntoView({ behavior: "smooth", block: "center" });
+  $("finish-form").scrollIntoView?.({ behavior: "smooth", block: "center" });
 };
 
 $("btn-write").onclick = async () => {
@@ -455,8 +459,8 @@ async function ask() {
   log.appendChild(pending);
   log.scrollTop = log.scrollHeight;
   try {
-    const r = await api("/api/assistant/ask", { step_id: current.step_id, question: q, history });
-    history.push({ role: "user", content: q }, { role: "assistant", content: r.answer });
+    const r = await api("/api/assistant/ask", { step_id: current.step_id, question: q, history: chatHistory });
+    chatHistory.push({ role: "user", content: q }, { role: "assistant", content: r.answer });
     pending.innerHTML = esc(r.answer) + `<span class="note">В журнал: ${esc(r.note)}</span>`;
     await refreshState();
   } catch (e) {
@@ -484,9 +488,13 @@ $("brand").onclick = () => {
   $("step").scrollTop = 0;
 };
 
+const closeHelp = () => { $("help").hidden = true; };
 $("btn-help").onclick = () => { $("help").hidden = false; };
-$("help-close").onclick = () => { $("help").hidden = true; };
-$("help").onclick = (e) => { if (e.target === $("help")) $("help").hidden = true; };
+$("help-close").onclick = closeHelp;
+$("help").onclick = (e) => { if (e.target === $("help")) closeHelp(); };
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("help").hidden) closeHelp();
+});
 
 try {
   if (!localStorage.getItem("seen-help")) {
