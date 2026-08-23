@@ -104,6 +104,14 @@ amount_clean    = IF(is_return, -VALUE(amount_stripped_final), VALUE(amount_stri
 на всех, и её легко не заметить по общей сумме, если сверять её только с
 округлением до миллионов.
 
+
+**Справочник по функциям этого шага.** Формулы здесь даны английскими
+именами; в русской и украинской локализации имена другие, логика та же.
+Полный список аргументов — в справочнике Microsoft, а не в этом тексте:
+
+- [`SUBSTITUTE` — замена подстроки](https://support.microsoft.com/en-us/office/substitute-function-6434944e-a904-4336-a9b0-1e58df3bc332)
+- [Относительные, абсолютные и смешанные ссылки](https://support.microsoft.com/en-us/office/switch-between-relative-absolute-and-mixed-references-dfec08cd-ae65-4f56-839e-5f0d8d0baca9)
+
 ## 1.3. Разобранный пример на сквозном датасете
 
 Датасет — `program/M2/data/sales_extract_raw.csv`, 20 000 строк, схема

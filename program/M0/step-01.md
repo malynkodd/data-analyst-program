@@ -58,6 +58,15 @@ UTF-8, редактор — на усмотрение учащегося»; за
 (`design/decisions.md`, решение 17). Проверяется терминал один раз, здесь,
 в M0 — а не на первом шаге, где это станет проблемой.
 
+
+**Справочник по тому, что здесь используется.** Текст шага объясняет
+только нужное для задания; полное описание команд и параметров — в
+официальной документации:
+
+- [Запуск Python из терминала](https://docs.python.org/3/tutorial/interpreter.html)
+- [Перемещение по каталогам в PowerShell](https://learn.microsoft.com/en-us/powershell/scripting/samples/managing-current-location)
+- [Стандартные кодировки Python — где искать `cp1251` и `utf-8`](https://docs.python.org/3/library/codecs.html#standard-encodings)
+
 ## 1.3. Разобранный пример на сквозном датасете
 
 Датасет модуля — `program/M0/data/`, описан в `data/README.md`. В этом

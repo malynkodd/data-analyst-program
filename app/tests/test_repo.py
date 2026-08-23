@@ -25,8 +25,8 @@ def test_every_module_folder_has_a_human_name() -> None:
 def test_names_come_from_blueprint_verbatim() -> None:
     catalog = repo.catalog()
     assert catalog["M3"]["name"] == "SQL"
-    assert catalog["M4"] == {"name": "Power BI", "hours": "26–35"}
-    assert catalog["M5"]["hours"] == "43–56"  # вилка решения 31, не 80–120
+    assert catalog["M4"] == {"name": "Power BI", "hours": "27–36"}
+    assert catalog["M5"]["hours"] == "45–56"  # вилка решения 41, не 80–120
     assert catalog["P1"]["name"] == "Какая точка худшая"
     assert catalog[repo.CAREER]["hours"] == "8–11"  # вилка решения 37
 

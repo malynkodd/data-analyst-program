@@ -112,6 +112,16 @@ MATCH(искомое_значение, диапазон_поиска, 0)
 книги. Поэтому запись через `$` — то, что пишут в рабочих файлах, а
 `A:A` — то, что допустимо здесь.
 
+
+**Справочник по функциям этого шага.** Формулы здесь даны английскими
+именами; в русской и украинской локализации имена другие, логика та же.
+Полный список аргументов — в справочнике Microsoft, а не в этом тексте:
+
+- [`XLOOKUP` — все шесть аргументов](https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929)
+- [`INDEX`](https://support.microsoft.com/en-us/office/index-function-a5dcf0dd-996d-40a4-a822-b56b061328bd)
+- [`MATCH`](https://support.microsoft.com/en-us/office/match-function-e8dffd45-c762-47d6-bf89-533f4a37673a)
+- [Относительные, абсолютные и смешанные ссылки](https://support.microsoft.com/en-us/office/switch-between-relative-absolute-and-mixed-references-dfec08cd-ae65-4f56-839e-5f0d8d0baca9)
+
 ## 1.3. Разобранный пример на сквозном датасете
 
 Датасет — `program/M2/data/sales_extract_raw.csv` (продажи) и
