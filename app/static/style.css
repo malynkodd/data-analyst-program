@@ -1,0 +1,105 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 340px;
+  height: 100vh;
+  font: 15px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1c1c1c;
+  background: #fff;
+}
+
+aside, main { overflow-y: auto; padding: 16px; }
+aside { background: #f6f6f4; border-right: 1px solid #ddd; }
+#chat { border-right: none; border-left: 1px solid #ddd; }
+
+h1 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: #666; }
+h2 { font-size: 20px; margin: 0 0 6px; }
+h3 { font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: #666; margin: 0 0 8px; }
+
+/* ---- дерево ---- */
+.mod { margin-bottom: 10px; }
+.mod > .mod-head {
+  font-weight: 600; cursor: pointer; display: flex; justify-content: space-between;
+  padding: 3px 4px; border-radius: 3px;
+}
+.mod > .mod-head:hover { background: #e8e8e4; }
+.mod-count { color: #888; font-weight: 400; font-variant-numeric: tabular-nums; }
+.step-link {
+  display: block; padding: 3px 4px 3px 14px; cursor: pointer;
+  border-radius: 3px; font-size: 13px; color: #333;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.step-link:hover { background: #e8e8e4; }
+.step-link.active { background: #dfe6ef; }
+.step-link.done { color: #2a6b2a; }
+.step-link.running { color: #9a5b00; font-weight: 600; }
+.step-link.decl { color: #999; font-style: italic; }
+.badge { font-size: 11px; margin-left: 4px; }
+
+/* ---- шаг ---- */
+#step-meta { color: #666; font-size: 13px; margin-bottom: 12px; }
+#step-meta code { background: #f2f2ef; padding: 1px 4px; border-radius: 3px; }
+
+.panel { border: 1px solid #ddd; border-radius: 5px; padding: 12px; margin-bottom: 14px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hint { color: #666; font-size: 13px; margin: 0 0 8px; }
+
+button {
+  font: inherit; padding: 5px 12px; border: 1px solid #999; border-radius: 4px;
+  background: #fff; cursor: pointer;
+}
+button:hover { background: #f0f0ec; }
+button.ghost { border-color: #ccc; color: #666; }
+button:disabled { opacity: .5; cursor: default; }
+
+input, textarea { font: inherit; width: 100%; padding: 4px 6px; border: 1px solid #ccc; border-radius: 3px; }
+label { display: block; margin: 6px 0; font-size: 13px; color: #555; }
+
+#timer { font-variant-numeric: tabular-nums; font-size: 18px; margin-left: 8px; }
+#session-status { color: #888; font-size: 13px; }
+
+/* ---- отложенные ручные прогоны ---- */
+.deferred-row {
+  border-left: 4px solid #b03030; background: #fdf2f2;
+  padding: 8px 10px; margin-bottom: 10px; font-size: 13px;
+}
+.deferred-row .head { font-weight: 600; color: #8a1f1f; }
+.deferred-row .warn { margin-top: 4px; font-weight: 600; }
+
+/* ---- результаты проверок ---- */
+.check { margin-bottom: 10px; }
+.check .cmd { font-family: Consolas, monospace; font-size: 12px; color: #444; word-break: break-all; }
+pre.out {
+  background: #1e1e1e; color: #e8e8e8; padding: 10px; border-radius: 4px;
+  font-size: 12.5px; white-space: pre-wrap; word-break: break-word; max-height: 340px; overflow: auto;
+}
+pre.out .ok { color: #7fd67f; }
+pre.out .fail { color: #ff8a8a; font-weight: 600; }
+.tag { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 3px; letter-spacing: .04em; }
+.tag.script { background: #26421f; color: #cdebc4; }
+.tag.ai { background: #4a3410; color: #ffdca8; }
+
+/* ---- вердикт ИИ ---- */
+.verdict { border: 2px dashed #b8860b; background: #fffaf0; padding: 10px; border-radius: 5px; margin-top: 10px; }
+.verdict h4 { margin: 6px 0 4px; font-size: 13px; }
+.verdict ul { margin: 2px 0 6px 18px; padding: 0; font-size: 13.5px; }
+
+/* ---- чат ---- */
+#chat-log { margin-bottom: 8px; }
+.msg { padding: 7px 9px; border-radius: 5px; margin-bottom: 7px; font-size: 13.5px; white-space: pre-wrap; }
+.msg.you { background: #e6ecf3; }
+.msg.ai { background: #fff; border: 1px solid #ddd; }
+.msg .note { display: block; margin-top: 5px; font-size: 11.5px; color: #8a6d1f; }
+
+/* ---- markdown шага ---- */
+#step-html { border-top: 1px solid #ddd; padding-top: 14px; }
+#step-html table { border-collapse: collapse; margin: 10px 0; font-size: 13.5px; display: block; overflow-x: auto; }
+#step-html th, #step-html td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; vertical-align: top; }
+#step-html th { background: #f2f2ef; }
+#step-html pre { background: #f6f6f4; border: 1px solid #e0e0dc; padding: 9px; border-radius: 4px; overflow-x: auto; font-size: 13px; }
+#step-html code { font-family: Consolas, monospace; font-size: 13px; }
+#step-html :not(pre) > code { background: #f2f2ef; padding: 1px 4px; border-radius: 3px; }
+#step-html h2 { font-size: 17px; margin-top: 22px; border-bottom: 1px solid #eee; padding-bottom: 3px; }
+#step-html blockquote { border-left: 3px solid #ccc; margin-left: 0; padding-left: 12px; color: #555; }

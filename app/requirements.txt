@@ -1,0 +1,5 @@
+flask==3.1.2
+markdown==3.10
+pygments==2.21.0
+anthropic
+pytest==9.1.1

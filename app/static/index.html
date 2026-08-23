@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Data Analyst Program — прохождение</title>
+<link rel="stylesheet" href="/pygments.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<aside id="tree">
+  <h1>Программа</h1>
+  <div id="tree-body">загрузка…</div>
+</aside>
+
+<main id="step">
+  <div id="step-empty">Выберите шаг слева.</div>
+
+  <div id="step-body" hidden>
+    <div id="deferred"></div>
+
+    <header id="step-head">
+      <h2 id="step-title"></h2>
+      <div id="step-meta"></div>
+    </header>
+
+    <section class="panel" id="session">
+      <div class="row">
+        <button id="btn-start">Начал</button>
+        <button id="btn-pause" hidden>Пауза</button>
+        <button id="btn-finish" hidden>Закончил</button>
+        <button id="btn-reopen" hidden>Снять отметку</button>
+        <span id="timer">00:00:00</span>
+        <span id="session-status"></span>
+      </div>
+      <div id="finish-form" hidden>
+        <label>Тема <input id="f-theme"></label>
+        <label>План (ч) <input id="f-plan" readonly></label>
+        <label>Факт (ч) <input id="f-fact" readonly></label>
+        <label>Где застрял <textarea id="f-stuck" rows="2"></textarea></label>
+        <label>Что оказалось лишним <textarea id="f-useless" rows="2"></textarea></label>
+        <div id="f-notes"></div>
+        <button id="btn-write">Записать в research/self.md</button>
+        <button id="btn-cancel" class="ghost">Отмена</button>
+      </div>
+      <pre id="journal-tail" hidden></pre>
+    </section>
+
+    <section class="panel" id="checks"></section>
+
+    <section class="panel" id="verdict-panel">
+      <h3>Письменный ответ — проверка ИИ по критерию</h3>
+      <p class="hint">Механической проверки здесь нет: ассистент сверяет ответ
+        с разделами 1.5 и 1.6 этого же файла. Это <b>не</b> результат скрипта.</p>
+      <label>Что проверяем <input id="v-task" placeholder="например: задание 13"></label>
+      <textarea id="v-answer" rows="5" placeholder="ваш письменный ответ"></textarea>
+      <button id="btn-verdict">Проверить ИИ по критерию</button>
+      <div id="verdict-out"></div>
+    </section>
+
+    <article id="step-html"></article>
+  </div>
+</main>
+
+<aside id="chat">
+  <h3>Ассистент</h3>
+  <p class="hint">Каждое обращение — пометка <code>[сторона]</code> в строку
+    сессии <code>research/self.md</code> (правило 6, решение 40).</p>
+  <div id="chat-log"></div>
+  <textarea id="chat-input" rows="3" placeholder="вопрос по шагу"></textarea>
+  <button id="btn-ask">Спросить</button>
+</aside>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
