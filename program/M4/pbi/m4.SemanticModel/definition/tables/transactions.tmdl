@@ -118,7 +118,7 @@ table transactions
 		source =
 				let
 				    Источник = Csv.Document(
-				        File.Contents("D:\data-analyst-program\program\M4\data\csv\transactions.csv"),
+				        File.Contents(DataFolder & "transactions.csv"),
 				        [Delimiter = ",", Columns = 8, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
 				    #"Повышенные заголовки" = Table.PromoteHeaders(Источник, [PromoteAllScalars = true]),
 				    #"Изменённый тип" = Table.TransformColumnTypes(#"Повышенные заголовки", {

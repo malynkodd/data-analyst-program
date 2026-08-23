@@ -1,0 +1,7 @@
+expression DataFolder = "D:\data-analyst-program\program\M4\data\csv_next\" meta [IsParameterQuery=true, Type="Any", IsParameterQueryRequired=true]
+	lineageTag: d0812f52-4f5c-4435-bfb5-ef98ccf6f9bd
+
+	annotation PBI_NavigationStepName = Навигация
+
+	annotation PBI_ResultType = Text
+

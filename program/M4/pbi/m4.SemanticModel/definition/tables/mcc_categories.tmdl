@@ -23,7 +23,7 @@ table mcc_categories
 		source =
 				let
 				    Источник = Csv.Document(
-				        File.Contents("D:\data-analyst-program\program\M4\data\csv\mcc_categories.csv"),
+				        File.Contents(DataFolder & "mcc_categories.csv"),
 				        [Delimiter = ",", Columns = 2, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
 				    #"Повышенные заголовки" = Table.PromoteHeaders(Источник, [PromoteAllScalars = true]),
 				    #"Изменённый тип" = Table.TransformColumnTypes(#"Повышенные заголовки", {

@@ -39,7 +39,7 @@ table merchants
 		source =
 				let
 				    Источник = Csv.Document(
-				        File.Contents("D:\data-analyst-program\program\M4\data\csv\merchants.csv"),
+				        File.Contents(DataFolder & "merchants.csv"),
 				        [Delimiter = ",", Columns = 4, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
 				    #"Повышенные заголовки" = Table.PromoteHeaders(Источник, [PromoteAllScalars = true]),
 				    #"Изменённый тип" = Table.TransformColumnTypes(#"Повышенные заголовки", {
