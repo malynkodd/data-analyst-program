@@ -9,7 +9,7 @@ model Model
 
 annotation __PBI_TimeIntelligenceEnabled = 1
 
-annotation PBI_QueryOrder = ["transactions","merchants","merchant_plan","mcc_categories","calendar"]
+annotation PBI_QueryOrder = ["transactions","merchants","merchant_plan","mcc_categories","calendar","DataFolder"]
 
 annotation PBI_ProTooling = ["DevMode"]
 
