@@ -15,6 +15,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import vault  # noqa: E402  — турникет закрытых материалов (решение 51)
+
 if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -1580,8 +1583,16 @@ def check_reference_csv_state() -> None:
 
     for data_dir in data_dirs:
         module = data_dir.parent.name
-        answers = data_dir / "reference_answers.md"
-        markers = _parse_reference_markers(answers.read_text(encoding="utf-8")) if answers.exists() else []
+        # Решения могут лежать закрытыми (решение 51): маркеры собираются
+        # и из открытого reference_answers.md, и из solutions.md, который
+        # читается через турникет. Иначе закрытие файла молча отключило бы
+        # единственную машинную сверку эталонов в репозитории.
+        answers_text = ""
+        for name in ("reference_answers.md", "solutions.md"):
+            candidate = data_dir / name
+            if candidate.exists() or vault.is_locked(candidate):
+                answers_text += vault.read_text(candidate) + chr(10)
+        markers = _parse_reference_markers(answers_text)
         has_schema = (data_dir / "schema.sql").exists()
 
         if not markers:

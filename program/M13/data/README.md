@@ -10,6 +10,7 @@
 
 | Файл | Роль | В git? |
 |---|---|---|
+| `closed_test_20.md.enc` | Закрыт турникетом `tools/vault.py` (решение 51): открывается командой `python toolsault.py open <путь без .enc> --attempt <файл вашей попытки>` и пишет проход в `research/attempts.md`. |
 | `closed_test_20.md` | Закрытый эталон для `step-02.md`: 20 вакансий из разделов LinkedIn/Otta и RemoteOK/WeWorkRemotely `research/market.md`, классифицированные этим заходом (не на Фазе 0). Не открывать до задания. | да |
 
 `step-01.md` использует раздел «Доп. сбор» `research/market.md`

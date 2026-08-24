@@ -51,19 +51,8 @@ ORDER BY customer_id, order_seq;
 
 ### T1. Накопительная сумма completed-заказов по клиенту
 
-Эталон: `a1_task1_running_total.csv` — `step-06.md`.
+Эталон: `a1_task1_running_total.csv` — `step-06.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-WITH completed AS (
-    SELECT customer_id, order_id, order_date, amount
-    FROM orders WHERE status = 'completed'
-)
-SELECT customer_id, order_id, order_date, amount,
-       SUM(amount) OVER (PARTITION BY customer_id ORDER BY order_date, order_id
-                          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total
-FROM completed
-ORDER BY customer_id, order_date, order_id;
-```
 
 | customer_id | order_id | order_date | amount | running_total |
 |---|---|---|---|---|
@@ -83,17 +72,8 @@ ORDER BY customer_id, order_date, order_id;
 
 ### T2. Ранжирование completed-заказов клиента по сумме (убывание)
 
-Эталон: `a1_task2_rank_desc.csv` — `step-06.md`.
+Эталон: `a1_task2_rank_desc.csv` — `step-06.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-WITH completed AS (
-    SELECT customer_id, order_id, amount FROM orders WHERE status = 'completed'
-)
-SELECT customer_id, order_id, amount,
-       ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY amount DESC, order_id ASC) AS rank_in_customer
-FROM completed
-ORDER BY customer_id, rank_in_customer;
-```
 
 | customer_id | order_id | amount | rank_in_customer |
 |---|---|---|---|
@@ -113,18 +93,8 @@ ORDER BY customer_id, rank_in_customer;
 
 ### T3. Разница с предыдущим completed-заказом клиента
 
-Эталон: `a1_task3_lag_diff.csv` — `step-06.md`.
+Эталон: `a1_task3_lag_diff.csv` — `step-06.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-WITH completed AS (
-    SELECT customer_id, order_id, order_date, amount FROM orders WHERE status = 'completed'
-)
-SELECT customer_id, order_id, order_date, amount,
-       LAG(amount) OVER (PARTITION BY customer_id ORDER BY order_date, order_id) AS prev_amount,
-       amount - LAG(amount) OVER (PARTITION BY customer_id ORDER BY order_date, order_id) AS diff_from_prev
-FROM completed
-ORDER BY customer_id, order_date, order_id;
-```
 
 | customer_id | order_id | order_date | amount | prev_amount | diff_from_prev |
 |---|---|---|---|---|---|
@@ -144,21 +114,8 @@ ORDER BY customer_id, order_date, order_id;
 
 ### T4. Накопительное число completed-заказов по городу
 
-Эталон: `a1_task4_city_cumulative.csv` — `step-06.md`.
+Эталон: `a1_task4_city_cumulative.csv` — `step-06.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-WITH completed AS (
-    SELECT o.order_id, o.order_date, c.city
-    FROM orders o
-    JOIN customers c ON c.customer_id = o.customer_id
-    WHERE o.status = 'completed'
-)
-SELECT city, order_id, order_date,
-       COUNT(*) OVER (PARTITION BY city ORDER BY order_date, order_id
-                      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS orders_so_far_in_city
-FROM completed
-ORDER BY city, order_date, order_id;
-```
 
 | city | order_id | order_date | orders_so_far_in_city |
 |---|---|---|---|
@@ -178,24 +135,8 @@ ORDER BY city, order_date, order_id;
 
 ### T5. Топ-2 позиции заказа по выручке в каждой категории товаров
 
-Эталон: `a1_task5_top2_category.csv` — `step-06.md`.
+Эталон: `a1_task5_top2_category.csv` — `step-06.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-WITH revenue AS (
-    SELECT oi.order_item_id, oi.product_id, p.category,
-           oi.quantity * oi.unit_price AS revenue
-    FROM order_items oi
-    JOIN products p ON p.product_id = oi.product_id
-),
-ranked AS (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC, order_item_id ASC) AS rank_in_category
-    FROM revenue
-)
-SELECT category, product_id, order_item_id, revenue, rank_in_category
-FROM ranked
-WHERE rank_in_category <= 2
-ORDER BY category, rank_in_category;
-```
 
 | category | product_id | order_item_id | revenue | rank_in_category |
 |---|---|---|---|---|
@@ -208,18 +149,8 @@ ORDER BY category, rank_in_category;
 
 ### T6. Отклонение от общего среднего чека (completed-заказы)
 
-Эталон: `a1_task6_diff_avg.csv` — `step-06.md`.
+Эталон: `a1_task6_diff_avg.csv` — `step-06.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-WITH completed AS (
-    SELECT customer_id, order_id, amount FROM orders WHERE status = 'completed'
-)
-SELECT order_id, customer_id, amount,
-       ROUND(AVG(amount) OVER (), 2) AS avg_completed_amount,
-       ROUND(amount - AVG(amount) OVER (), 2) AS diff_from_avg
-FROM completed
-ORDER BY order_id;
-```
 
 | order_id | customer_id | amount | avg_completed_amount | diff_from_avg |
 |---|---|---|---|---|
@@ -284,43 +215,8 @@ CSV, поэтому правка одного и забытая правка д�
 
 ### M1 (1.3, разобранный пример) — `+1 month`, файл `a3_cohort_retention_m1.csv`
 
-Эталон: `a3_cohort_retention_m1.csv` — `step-07.md`.
+Эталон: `a3_cohort_retention_m1.csv` — `step-07.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-WITH first_order AS (
-    SELECT customer_id, MIN(order_date) AS first_date
-    FROM orders
-    WHERE customer_id > 100
-    GROUP BY customer_id
-),
-cohorts AS (
-    SELECT customer_id, substr(first_date, 1, 7) AS cohort_month
-    FROM first_order
-),
-cohort_size AS (
-    SELECT cohort_month, COUNT(*) AS cohort_size
-    FROM cohorts
-    GROUP BY cohort_month
-),
-target_month_activity AS (
-    SELECT c.cohort_month, c.customer_id
-    FROM cohorts c
-    JOIN orders o ON o.customer_id = c.customer_id
-    WHERE substr(o.order_date, 1, 7) = strftime('%Y-%m', c.cohort_month || '-01', '+1 month')
-    GROUP BY c.cohort_month, c.customer_id
-),
-retained AS (
-    SELECT cohort_month, COUNT(*) AS retained
-    FROM target_month_activity
-    GROUP BY cohort_month
-)
-SELECT s.cohort_month, s.cohort_size,
-       COALESCE(r.retained, 0) AS retained,
-       ROUND(COALESCE(r.retained, 0) * 100.0 / s.cohort_size, 2) AS retention_pct
-FROM cohort_size s
-LEFT JOIN retained r ON r.cohort_month = s.cohort_month
-ORDER BY s.cohort_month;
-```
 
 | cohort_month | cohort_size | retained | retention_pct |
 |---|---|---|---|
@@ -339,43 +235,8 @@ ORDER BY s.cohort_month;
 
 ### M2 (1.4, задание) — `+2 month`, файл `a3_cohort_retention_m2.csv`
 
-Эталон: `a3_cohort_retention_m2.csv` — `step-07.md`.
+Эталон: `a3_cohort_retention_m2.csv` — `step-07.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-WITH first_order AS (
-    SELECT customer_id, MIN(order_date) AS first_date
-    FROM orders
-    WHERE customer_id > 100
-    GROUP BY customer_id
-),
-cohorts AS (
-    SELECT customer_id, substr(first_date, 1, 7) AS cohort_month
-    FROM first_order
-),
-cohort_size AS (
-    SELECT cohort_month, COUNT(*) AS cohort_size
-    FROM cohorts
-    GROUP BY cohort_month
-),
-target_month_activity AS (
-    SELECT c.cohort_month, c.customer_id
-    FROM cohorts c
-    JOIN orders o ON o.customer_id = c.customer_id
-    WHERE substr(o.order_date, 1, 7) = strftime('%Y-%m', c.cohort_month || '-01', '+2 month')
-    GROUP BY c.cohort_month, c.customer_id
-),
-retained AS (
-    SELECT cohort_month, COUNT(*) AS retained
-    FROM target_month_activity
-    GROUP BY cohort_month
-)
-SELECT s.cohort_month, s.cohort_size,
-       COALESCE(r.retained, 0) AS retained,
-       ROUND(COALESCE(r.retained, 0) * 100.0 / s.cohort_size, 2) AS retention_pct
-FROM cohort_size s
-LEFT JOIN retained r ON r.cohort_month = s.cohort_month
-ORDER BY s.cohort_month;
-```
 
 | cohort_month | cohort_size | retained | retention_pct |
 |---|---|---|---|
@@ -661,19 +522,8 @@ time zone` (проверено `pg_typeof`), отсюда необходимос
 
 ### T1. Клиенты с completed-заказом и без единого платежа, по городам
 
-Эталон: `a6_task1_no_payments.csv` — `step-13.md`.
+Эталон: `a6_task1_no_payments.csv` — `step-13.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-SELECT c.city, COUNT(*) AS customers_without_payment
-FROM customers c
-WHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id
-                                       AND o.status = 'completed')
-  AND NOT EXISTS (SELECT 1 FROM payments p
-                  JOIN orders o2 ON o2.order_id = p.order_id
-                  WHERE o2.customer_id = c.customer_id)
-GROUP BY c.city
-ORDER BY c.city;
-```
 
 | city | customers_without_payment |
 |---|---|
@@ -685,21 +535,8 @@ ORDER BY c.city;
 
 ### T2. Три записи одного вопроса «заказы без платежа» и ловушка `NULL`
 
-Эталон: `a6_task2_not_in_null.csv` — `step-13.md`.
+Эталон: `a6_task2_not_in_null.csv` — `step-13.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-SELECT 'not_in_with_null' AS variant, COUNT(*) AS rows_returned FROM orders
-WHERE order_id NOT IN (SELECT p.order_id FROM orders o
-                       LEFT JOIN payments p ON p.order_id = o.order_id)
-UNION ALL
-SELECT 'not_in_filtered', COUNT(*) FROM orders
-WHERE order_id NOT IN (SELECT p.order_id FROM orders o
-                       LEFT JOIN payments p ON p.order_id = o.order_id
-                       WHERE p.order_id IS NOT NULL)
-UNION ALL
-SELECT 'not_exists', COUNT(*) FROM orders o2
-WHERE NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o2.order_id);
-```
 
 | variant | rows_returned |
 |---|---|
@@ -709,21 +546,8 @@ WHERE NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o2.order_id);
 
 ### T3. `UNION` против `UNION ALL` на одном вопросе
 
-Эталон: `a6_task3_union.csv` — `step-13.md`.
+Эталон: `a6_task3_union.csv` — `step-13.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-SELECT 'union_all' AS variant, COUNT(*) AS rows_returned FROM (
-    SELECT customer_id FROM orders WHERE order_date < '2026-01-01'
-    UNION ALL
-    SELECT customer_id FROM orders WHERE order_date >= '2026-01-01'
-)
-UNION ALL
-SELECT 'union', COUNT(*) FROM (
-    SELECT customer_id FROM orders WHERE order_date < '2026-01-01'
-    UNION
-    SELECT customer_id FROM orders WHERE order_date >= '2026-01-01'
-);
-```
 
 | variant | rows_returned |
 |---|---|
@@ -732,19 +556,8 @@ SELECT 'union', COUNT(*) FROM (
 
 ### T4. Распределение completed-заказов по размеру суммы, `CASE WHEN` в агрегате
 
-Эталон: `a6_task4_case_buckets.csv` — `step-13.md`.
+Эталон: `a6_task4_case_buckets.csv` — `step-13.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-SELECT c.city,
-       SUM(CASE WHEN o.amount <  500 THEN 1 ELSE 0 END) AS small,
-       SUM(CASE WHEN o.amount >= 500 AND o.amount < 1000 THEN 1 ELSE 0 END) AS medium,
-       SUM(CASE WHEN o.amount >= 1000 THEN 1 ELSE 0 END) AS large
-FROM orders o
-JOIN customers c ON c.customer_id = o.customer_id
-WHERE o.status = 'completed'
-GROUP BY c.city
-ORDER BY c.city;
-```
 
 | city | small | medium | large |
 |---|---|---|---|
@@ -756,20 +569,8 @@ ORDER BY c.city;
 
 ### T5. Повторный completed-заказ в течение 30 дней, self-join
 
-Эталон: `a6_task5_self_join.csv` — `step-13.md`.
+Эталон: `a6_task5_self_join.csv` — `step-13.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-SELECT c.city, COUNT(DISTINCT a.customer_id) AS customers_with_repeat_30d
-FROM orders a
-JOIN orders b ON b.customer_id = a.customer_id
-            AND b.order_id <> a.order_id
-            AND b.order_date > a.order_date
-            AND julianday(b.order_date) - julianday(a.order_date) <= 30
-JOIN customers c ON c.customer_id = a.customer_id
-WHERE a.status = 'completed' AND b.status = 'completed'
-GROUP BY c.city
-ORDER BY c.city;
-```
 
 | city | customers_with_repeat_30d |
 |---|---|
@@ -781,16 +582,8 @@ ORDER BY c.city;
 
 ### T6. Топ-5 клиентов по сумме completed-заказов, `LIMIT`
 
-Эталон: `a6_task6_top5.csv` — `step-13.md`.
+Эталон: `a6_task6_top5.csv` — `step-13.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-SELECT c.customer_id, c.name, ROUND(SUM(o.amount), 2) AS total
-FROM orders o JOIN customers c ON c.customer_id = o.customer_id
-WHERE o.status = 'completed'
-GROUP BY c.customer_id, c.name
-ORDER BY total DESC, c.customer_id ASC
-LIMIT 5;
-```
 
 | customer_id | name | total |
 |---|---|---|
@@ -804,23 +597,8 @@ LIMIT 5;
 
 ### T1. Лестница нормализации: сколько строк сопоставляется после каждой замены
 
-Эталон: `a7_task1_ladder.csv` — `step-14.md`.
+Эталон: `a7_task1_ladder.csv` — `step-14.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-SELECT 'raw' AS method, COUNT(*) AS matched, 60 - COUNT(*) AS lost
-FROM invoice_feed f JOIN partner_registry p ON f.counterparty_raw = p.legal_name
-UNION ALL
-SELECT 'trim', COUNT(*), 60 - COUNT(*)
-FROM invoice_feed f JOIN partner_registry p ON TRIM(f.counterparty_raw) = TRIM(p.legal_name)
-UNION ALL
-SELECT 'trim_spaces', COUNT(*), 60 - COUNT(*)
-FROM invoice_feed f JOIN partner_registry p
-  ON REPLACE(TRIM(f.counterparty_raw), '  ', ' ') = REPLACE(TRIM(p.legal_name), '  ', ' ')
-UNION ALL
-SELECT 'trim_spaces_quotes', COUNT(*), 60 - COUNT(*)
-FROM invoice_feed f JOIN partner_registry p
-  ON REPLACE(REPLACE(REPLACE(TRIM(f.counterparty_raw), '  ', ' '), '"', '«'), '»', '«') = REPLACE(REPLACE(REPLACE(TRIM(p.legal_name), '  ', ' '), '"', '«'), '»', '«');
-```
 
 | method | matched | lost |
 |---|---|---|
@@ -831,17 +609,8 @@ FROM invoice_feed f JOIN partner_registry p
 
 ### T2. Несопоставленные счета, `NOT EXISTS`
 
-Эталон: `a7_task2_unmatched.csv` — `step-14.md`.
+Эталон: `a7_task2_unmatched.csv` — `step-14.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-SELECT f.invoice_id, f.counterparty_raw
-FROM invoice_feed f
-WHERE NOT EXISTS (
-    SELECT 1 FROM partner_registry p
-    WHERE REPLACE(REPLACE(REPLACE(TRIM(p.legal_name), '  ', ' '), '"', '«'), '»', '«') = REPLACE(REPLACE(REPLACE(TRIM(f.counterparty_raw), '  ', ' '), '"', '«'), '»', '«')
-)
-ORDER BY f.invoice_id;
-```
 
 | invoice_id | counterparty_raw |
 |---|---|
@@ -861,22 +630,8 @@ ORDER BY f.invoice_id;
 
 ### T3. Сверка справочника и потока через `FULL OUTER JOIN`
 
-Эталон: `a7_task3_full_outer.csv` — `step-14.md`.
+Эталон: `a7_task3_full_outer.csv` — `step-14.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-WITH reg AS (
-    SELECT partner_id, legal_name, REPLACE(REPLACE(REPLACE(TRIM(legal_name), '  ', ' '), '"', '«'), '»', '«') AS norm_key
-    FROM partner_registry
-), feed AS (
-    SELECT REPLACE(REPLACE(REPLACE(TRIM(counterparty_raw), '  ', ' '), '"', '«'), '»', '«') AS norm_key, COUNT(*) AS invoices,
-           ROUND(SUM(amount), 2) AS total
-    FROM invoice_feed GROUP BY 1
-)
-SELECT reg.partner_id, reg.legal_name, feed.norm_key AS feed_key,
-       COALESCE(feed.invoices, 0) AS invoices, COALESCE(feed.total, 0) AS total
-FROM reg FULL OUTER JOIN feed ON feed.norm_key = reg.norm_key
-ORDER BY (reg.partner_id IS NULL), reg.partner_id, feed.norm_key;
-```
 
 | partner_id | legal_name | feed_key | invoices | total |
 |---|---|---|---|---|
@@ -896,14 +651,8 @@ ORDER BY (reg.partner_id IS NULL), reg.partner_id, feed.norm_key;
 
 ### T4. Что делают `LOWER` и `UPPER` с кириллицей в SQLite
 
-Эталон: `a7_task4_upper_probe.csv` — `step-14.md`.
+Эталон: `a7_task4_upper_probe.csv` — `step-14.md`. Запрос закрыт турникетом: `python tools\vault.py open program\M3\data\solutions.md --attempt <ваш файл>` (решение 51).
 
-```sql
-SELECT 'lower_cyrillic' AS probe, LOWER('ТОВ') AS result
-UNION ALL SELECT 'upper_cyrillic', UPPER('тов')
-UNION ALL SELECT 'lower_latin', LOWER('ABC')
-UNION ALL SELECT 'upper_latin', UPPER('abc');
-```
 
 | probe | result |
 |---|---|
