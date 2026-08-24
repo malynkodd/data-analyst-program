@@ -1,0 +1,4 @@
+method,matched,matched_uah,lost_uah
+raw,11,51562.5,208677.5
+trim,21,95250.0,164990.0
+trim_spaces,31,138937.5,121302.5
