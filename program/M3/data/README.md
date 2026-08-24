@@ -42,6 +42,18 @@ bash (решение 13, `design/decisions.md`). `.read` — внутрення�
 | `retention_seed.sql` | Сгенерированные `INSERT` для умения A3 — `generate_retention.py`, `SEED = 20260803`: +240 клиентов, +347 заказов по 12 месячным когортам. Загружается после `seed.sql`. |
 | `generate_retention.py` | Генератор `retention_seed.sql`. Детерминирован (`SEED = 20260803`); перегенерация даёт побайтово тот же файл. |
 | `generate_activity_log.py` | Генератор таблицы `activity_log` (умение A4) — создаёт её прямо в `m3.db` при запуске, результат не коммитится (см. `step-00.md`, раздел «Дополнение»). Детерминирован (`SEED = 20260804`), печатает число строк и sha256 первых 1000 для сверки с `reference_answers.md`. |
+| `generate_registry.py` | Генератор `registry_seed.sql` (умение A7). Детерминирован, без случайности: перегенерация даёт побайтово тот же файл. |
+| `registry_seed.sql` | Две таблицы шага 14: `partner_registry` (12 контрагентов) и `invoice_feed` (60 счетов, контрагент указан только названием и в пяти написаниях). Загружается после `retention_seed.sql`. |
+| `a6_task1_no_payments.csv` | Эталон `step-13.md`, задача 1 (`EXISTS`/`NOT EXISTS`). 5 строк. |
+| `a6_task2_not_in_null.csv` | Эталон `step-13.md`, задача 2 (ловушка `NOT IN` с `NULL`). 3 строки. |
+| `a6_task3_union.csv` | Эталон `step-13.md`, задача 3 (`UNION` против `UNION ALL`). 2 строки. |
+| `a6_task4_case_buckets.csv` | Эталон `step-13.md`, задача 4 (`CASE WHEN` в агрегате). 5 строк. |
+| `a6_task5_self_join.csv` | Эталон `step-13.md`, задача 5 (self-join, повтор в 30 дней). 5 строк. |
+| `a6_task6_top5.csv` | Эталон `step-13.md`, задача 6 (`LIMIT`). 5 строк. |
+| `a7_task1_ladder.csv` | Эталон `step-14.md`, задача 1 (лестница нормализации ключа). 4 строки. |
+| `a7_task2_unmatched.csv` | Эталон `step-14.md`, задача 2 (несопоставленные счета). 19 строк. |
+| `a7_task3_full_outer.csv` | Эталон `step-14.md`, задача 3 (`FULL OUTER JOIN` справочника и потока). 30 строк. |
+| `a7_task4_upper_probe.csv` | Эталон `step-14.md`, задача 4 (`LOWER`/`UPPER` на кириллице и латинице). 4 строки. |
 | `reference_answers.md` | Эталонные числа для A1 (6 задач battery), A3 (когортный retention M1/M2), A4 (время до/после, план запроса, контрольная точка датасета) — из реального выполнения SQL и замеров. |
 | `a1_task1_running_total.csv` | Эталон для `step-06.md`, 1.4, задача 1 (накопительная сумма). |
 | `a1_task2_rank_desc.csv` | Эталон для `step-06.md`, 1.4, задача 2 (ранжирование по убыванию суммы). |
@@ -128,10 +140,12 @@ EDB (основной в `step-09.md`) на этой машине не пров�
 | `step-01.md` | 5 таблиц модуля, исходные 12 клиентов / 19 заказов | `schema.sql`, `seed.sql` |
 | `step-07.md` | +240 клиентов / +347 заказов, 12 месячных когорт для A3 | `retention_seed.sql` |
 | `step-08.md` | таблица `activity_log` для A4 | `generate_activity_log.py` |
+| `step-14.md` | +`partner_registry` (12) и `invoice_feed` (60) для A7 | `registry_seed.sql` |
 
-Шаги `step-02.md`–`step-06.md` и `step-09.md`–`step-12.md` новых данных
+Шаги `step-02.md`–`step-06.md`, `step-09.md`–`step-13.md` новых данных
 не добавляют: 02–06 работают на состоянии после `step-01.md`, 09–12 — на
-перенесённой в PostgreSQL копии состояния после `step-08.md`.
+перенесённой в PostgreSQL копии состояния после `step-08.md`, а
+`step-13.md` — на состоянии после `step-07.md` в SQLite.
 
 `tools/check_consistency.py` собирает по этой таблице накопительное
 состояние базы для каждого шага и на нём выполняет эталонные запросы из
@@ -164,6 +178,14 @@ EDB (основной в `step-09.md`) на этой машине не пров�
 |---|---|
 | customers после seed.sql, retention_seed.sql | 252 |
 | orders после seed.sql, retention_seed.sql | 366 |
+
+Состояние 3 — после `step-14.md` (добавлен `registry_seed.sql`). В нём
+посчитаны эталоны `a7_task*.csv`; остальные таблицы не меняются:
+
+| Проверка | Ожидается строк |
+|---|---|
+| partner_registry после seed.sql, retention_seed.sql, registry_seed.sql | 12 |
+| invoice_feed после seed.sql, retention_seed.sql, registry_seed.sql | 60 |
 
 `activity_log` (умение A4) сюда не входит — не коммитится, строк по
 конструкции столько, сколько задано при локальном запуске

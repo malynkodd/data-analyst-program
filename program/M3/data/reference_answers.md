@@ -654,3 +654,260 @@ time zone` (проверено `pg_typeof`), отсюда необходимос
 340: 1550, 1582, 1561 события в обоих вариантах) — совпадение держится
 только на формате `ГГГГ-ММ-ДД`, где лексикографический порядок совпадает
 с хронологическим. В `step-12.md` берётся `DATE`.
+
+---
+
+## A6 — подзапросы, наборы, ветвление (`step-13.md`, 1.4), 6 задач
+
+### T1. Клиенты с completed-заказом и без единого платежа, по городам
+
+Эталон: `a6_task1_no_payments.csv` — `step-13.md`.
+
+```sql
+SELECT c.city, COUNT(*) AS customers_without_payment
+FROM customers c
+WHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id
+                                       AND o.status = 'completed')
+  AND NOT EXISTS (SELECT 1 FROM payments p
+                  JOIN orders o2 ON o2.order_id = p.order_id
+                  WHERE o2.customer_id = c.customer_id)
+GROUP BY c.city
+ORDER BY c.city;
+```
+
+| city | customers_without_payment |
+|---|---|
+| Дніпро | 50 |
+| Київ | 43 |
+| Львів | 38 |
+| Одеса | 56 |
+| Харків | 53 |
+
+### T2. Три записи одного вопроса «заказы без платежа» и ловушка `NULL`
+
+Эталон: `a6_task2_not_in_null.csv` — `step-13.md`.
+
+```sql
+SELECT 'not_in_with_null' AS variant, COUNT(*) AS rows_returned FROM orders
+WHERE order_id NOT IN (SELECT p.order_id FROM orders o
+                       LEFT JOIN payments p ON p.order_id = o.order_id)
+UNION ALL
+SELECT 'not_in_filtered', COUNT(*) FROM orders
+WHERE order_id NOT IN (SELECT p.order_id FROM orders o
+                       LEFT JOIN payments p ON p.order_id = o.order_id
+                       WHERE p.order_id IS NOT NULL)
+UNION ALL
+SELECT 'not_exists', COUNT(*) FROM orders o2
+WHERE NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o2.order_id);
+```
+
+| variant | rows_returned |
+|---|---|
+| not_in_with_null | 0 |
+| not_in_filtered | 353 |
+| not_exists | 353 |
+
+### T3. `UNION` против `UNION ALL` на одном вопросе
+
+Эталон: `a6_task3_union.csv` — `step-13.md`.
+
+```sql
+SELECT 'union_all' AS variant, COUNT(*) AS rows_returned FROM (
+    SELECT customer_id FROM orders WHERE order_date < '2026-01-01'
+    UNION ALL
+    SELECT customer_id FROM orders WHERE order_date >= '2026-01-01'
+)
+UNION ALL
+SELECT 'union', COUNT(*) FROM (
+    SELECT customer_id FROM orders WHERE order_date < '2026-01-01'
+    UNION
+    SELECT customer_id FROM orders WHERE order_date >= '2026-01-01'
+);
+```
+
+| variant | rows_returned |
+|---|---|
+| union_all | 366 |
+| union | 250 |
+
+### T4. Распределение completed-заказов по размеру суммы, `CASE WHEN` в агрегате
+
+Эталон: `a6_task4_case_buckets.csv` — `step-13.md`.
+
+```sql
+SELECT c.city,
+       SUM(CASE WHEN o.amount <  500 THEN 1 ELSE 0 END) AS small,
+       SUM(CASE WHEN o.amount >= 500 AND o.amount < 1000 THEN 1 ELSE 0 END) AS medium,
+       SUM(CASE WHEN o.amount >= 1000 THEN 1 ELSE 0 END) AS large
+FROM orders o
+JOIN customers c ON c.customer_id = o.customer_id
+WHERE o.status = 'completed'
+GROUP BY c.city
+ORDER BY c.city;
+```
+
+| city | small | medium | large |
+|---|---|---|---|
+| Дніпро | 14 | 27 | 36 |
+| Київ | 10 | 25 | 31 |
+| Львів | 11 | 24 | 23 |
+| Одеса | 20 | 28 | 37 |
+| Харків | 17 | 32 | 25 |
+
+### T5. Повторный completed-заказ в течение 30 дней, self-join
+
+Эталон: `a6_task5_self_join.csv` — `step-13.md`.
+
+```sql
+SELECT c.city, COUNT(DISTINCT a.customer_id) AS customers_with_repeat_30d
+FROM orders a
+JOIN orders b ON b.customer_id = a.customer_id
+            AND b.order_id <> a.order_id
+            AND b.order_date > a.order_date
+            AND julianday(b.order_date) - julianday(a.order_date) <= 30
+JOIN customers c ON c.customer_id = a.customer_id
+WHERE a.status = 'completed' AND b.status = 'completed'
+GROUP BY c.city
+ORDER BY c.city;
+```
+
+| city | customers_with_repeat_30d |
+|---|---|
+| Дніпро | 11 |
+| Київ | 4 |
+| Львів | 5 |
+| Одеса | 12 |
+| Харків | 10 |
+
+### T6. Топ-5 клиентов по сумме completed-заказов, `LIMIT`
+
+Эталон: `a6_task6_top5.csv` — `step-13.md`.
+
+```sql
+SELECT c.customer_id, c.name, ROUND(SUM(o.amount), 2) AS total
+FROM orders o JOIN customers c ON c.customer_id = o.customer_id
+WHERE o.status = 'completed'
+GROUP BY c.customer_id, c.name
+ORDER BY total DESC, c.customer_id ASC
+LIMIT 5;
+```
+
+| customer_id | name | total |
+|---|---|---|
+| 286 | Клієнт retention 286 | 3738.42 |
+| 195 | Клієнт retention 195 | 3693.7 |
+| 112 | Клієнт retention 112 | 3391.3 |
+| 215 | Клієнт retention 215 | 2910.27 |
+| 200 | Клієнт retention 200 | 2899.32 |
+
+## A7 — грязный текстовый ключ (`step-14.md`, 1.4), 4 задачи
+
+### T1. Лестница нормализации: сколько строк сопоставляется после каждой замены
+
+Эталон: `a7_task1_ladder.csv` — `step-14.md`.
+
+```sql
+SELECT 'raw' AS method, COUNT(*) AS matched, 60 - COUNT(*) AS lost
+FROM invoice_feed f JOIN partner_registry p ON f.counterparty_raw = p.legal_name
+UNION ALL
+SELECT 'trim', COUNT(*), 60 - COUNT(*)
+FROM invoice_feed f JOIN partner_registry p ON TRIM(f.counterparty_raw) = TRIM(p.legal_name)
+UNION ALL
+SELECT 'trim_spaces', COUNT(*), 60 - COUNT(*)
+FROM invoice_feed f JOIN partner_registry p
+  ON REPLACE(TRIM(f.counterparty_raw), '  ', ' ') = REPLACE(TRIM(p.legal_name), '  ', ' ')
+UNION ALL
+SELECT 'trim_spaces_quotes', COUNT(*), 60 - COUNT(*)
+FROM invoice_feed f JOIN partner_registry p
+  ON REPLACE(REPLACE(REPLACE(TRIM(f.counterparty_raw), '  ', ' '), '"', '«'), '»', '«') = REPLACE(REPLACE(REPLACE(TRIM(p.legal_name), '  ', ' '), '"', '«'), '»', '«');
+```
+
+| method | matched | lost |
+|---|---|---|
+| raw | 11 | 49 |
+| trim | 21 | 39 |
+| trim_spaces | 31 | 29 |
+| trim_spaces_quotes | 41 | 19 |
+
+### T2. Несопоставленные счета, `NOT EXISTS`
+
+Эталон: `a7_task2_unmatched.csv` — `step-14.md`.
+
+```sql
+SELECT f.invoice_id, f.counterparty_raw
+FROM invoice_feed f
+WHERE NOT EXISTS (
+    SELECT 1 FROM partner_registry p
+    WHERE REPLACE(REPLACE(REPLACE(TRIM(p.legal_name), '  ', ' '), '"', '«'), '»', '«') = REPLACE(REPLACE(REPLACE(TRIM(f.counterparty_raw), '  ', ' '), '"', '«'), '»', '«')
+)
+ORDER BY f.invoice_id;
+```
+
+| invoice_id | counterparty_raw |
+|---|---|
+| 9002 | ТОВ «ЧЕРЕМОШ МАРКЕТ» |
+| 9007 | ТОВ «СЛАВУТИЧ ПРОМ» |
+| 9011 | ТОВ «КОБЗА ЛОГІСТИК» |
+| 9016 | ПП «ЛИМАН ГРУП» |
+| 9025 | ТОВ «КАРПАТИ СЕРВІС» |
+| 9030 | ТОВ «БАРВІНОК АГРО» |
+| 9034 | ТОВ «ДНІПРО ТРЕЙД» |
+| 9039 | ПП «ЕДЕЛЬВЕЙС ПЛЮС» |
+| 9043 | ПП «КАШТАН МАРКЕТ» |
+| 9048 | ТОВ «ОРІОН ПОСТАЧ» |
+| 9052 | ТОВ «ЧЕРЕМОШ МАРКЕТ» |
+| 9053 | ТОВ «Незалежний Постачальник» |
+| … | ещё 7 строк — см. `a7_task2_unmatched.csv` |
+
+### T3. Сверка справочника и потока через `FULL OUTER JOIN`
+
+Эталон: `a7_task3_full_outer.csv` — `step-14.md`.
+
+```sql
+WITH reg AS (
+    SELECT partner_id, legal_name, REPLACE(REPLACE(REPLACE(TRIM(legal_name), '  ', ' '), '"', '«'), '»', '«') AS norm_key
+    FROM partner_registry
+), feed AS (
+    SELECT REPLACE(REPLACE(REPLACE(TRIM(counterparty_raw), '  ', ' '), '"', '«'), '»', '«') AS norm_key, COUNT(*) AS invoices,
+           ROUND(SUM(amount), 2) AS total
+    FROM invoice_feed GROUP BY 1
+)
+SELECT reg.partner_id, reg.legal_name, feed.norm_key AS feed_key,
+       COALESCE(feed.invoices, 0) AS invoices, COALESCE(feed.total, 0) AS total
+FROM reg FULL OUTER JOIN feed ON feed.norm_key = reg.norm_key
+ORDER BY (reg.partner_id IS NULL), reg.partner_id, feed.norm_key;
+```
+
+| partner_id | legal_name | feed_key | invoices | total |
+|---|---|---|---|---|
+| 1 | ТОВ «Кобза Логістик» | ТОВ «Кобза Логістик« | 5 | 24250.0 |
+| 2 | ТОВ «Черемош Маркет» | ТОВ «Черемош Маркет« | 4 | 18300.0 |
+| 3 | ПП «Каштан Маркет» | ПП «Каштан Маркет« | 4 | 13350.0 |
+| 4 | ТОВ «Дніпро Трейд» | ТОВ «Дніпро Трейд« | 4 | 15275.0 |
+| 5 | ТОВ «Карпати Сервіс» | ТОВ «Карпати Сервіс« | 4 | 17200.0 |
+| 6 | ПП «Лиман Груп» | ПП «Лиман Груп« | 4 | 19125.0 |
+| 7 | ТОВ «Славутич Пром» | ТОВ «Славутич Пром« | 4 | 21050.0 |
+| 8 | ТОВ «Оріон Постач» | ТОВ «Оріон Постач« | 4 | 16100.0 |
+| 9 | ПП «Едельвейс Плюс» | ПП «Едельвейс Плюс« | 4 | 18025.0 |
+| 10 | ТОВ «Барвінок Агро» | ТОВ «Барвінок Агро« | 4 | 19950.0 |
+| 11 | ТОВ «Тиса Транс» |  | 0 | 0 |
+| 12 | ПП «Верховина Буд» |  | 0 | 0 |
+| … | ещё 18 строк — см. `a7_task3_full_outer.csv` | | | |
+
+### T4. Что делают `LOWER` и `UPPER` с кириллицей в SQLite
+
+Эталон: `a7_task4_upper_probe.csv` — `step-14.md`.
+
+```sql
+SELECT 'lower_cyrillic' AS probe, LOWER('ТОВ') AS result
+UNION ALL SELECT 'upper_cyrillic', UPPER('тов')
+UNION ALL SELECT 'lower_latin', LOWER('ABC')
+UNION ALL SELECT 'upper_latin', UPPER('abc');
+```
+
+| probe | result |
+|---|---|
+| lower_cyrillic | ТОВ |
+| upper_cyrillic | тов |
+| lower_latin | abc |
+| upper_latin | ABC |

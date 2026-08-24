@@ -1,0 +1,5 @@
+method,matched,lost
+raw,11,49
+trim,21,39
+trim_spaces,31,29
+trim_spaces_quotes,41,19
