@@ -146,10 +146,10 @@ Blueprint, часть 6.4, обещает работодателю 36 прове
 | 6 | `M3/step-08.md`, `M3/step-12.md` |
 | 7 | `M4/step-03.md`, `M4/step-04.md` |
 | 8 | `M15/step-02.md` |
-| 9 | `M5/step-04.md` |
-| 10 | `M5/step-05.md` |
-| 11 | `M5/step-06.md` |
-| 12 | `M5/step-07.md` |
+| 9 | `M5/step-05.md` |
+| 10 | `M5/step-06.md` |
+| 11 | `M5/step-07.md` |
+| 12 | `M5/step-08.md` |
 | 13 | `M7/step-02.md`, `M7/step-03.md` |
 | 14 | `M12/step-01.md` |
 

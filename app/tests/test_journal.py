@@ -111,7 +111,7 @@ def test_pipe_in_free_text_cannot_break_the_row(journal_copy) -> None:
 def test_notes_go_into_stuck_column_one_by_one(journal_copy) -> None:
     """Правило 6: отдельная пометка на каждое обращение, а не сводка."""
     row = journal.compose_row(
-        theme="M5.03",
+        theme="M5.04",
         plan="6–8",
         fact="2.5",
         stuck="pandas merge по двум ключам",
