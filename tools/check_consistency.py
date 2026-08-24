@@ -1446,10 +1446,23 @@ def check_data_readme_counts() -> None:
                     label = f"{readme.relative_to(ROOT)}: {spec}"
                 elif spec.endswith(".csv"):
                     csv_path = data_dir / spec
-                    if not csv_path.exists():
+                    if csv_path.exists():
+                        actual = _count_csv_rows(csv_path)
+                    elif vault.is_locked(csv_path):
+                        # Эталон закрыт турникетом (решение 53): в шести проектах
+                        # эталонная таблица и есть ответ на вопрос заказчика.
+                        # Проверка читает её через тот же турникет, что и решения
+                        # M3, — закрытие файла не должно молча отключать сверку.
+                        actual = len(
+                            [
+                                line
+                                for line in vault.read_text(csv_path).splitlines()[1:]
+                                if line.strip()
+                            ]
+                        )
+                    else:
                         fail(f"{readme.relative_to(ROOT)}: файл {spec} из раздела «Проверка строк» не найден")
                         continue
-                    actual = _count_csv_rows(csv_path)
                     label = f"{readme.relative_to(ROOT)}: {spec}"
                 else:
                     fail(f"{readme.relative_to(ROOT)}: строка «{spec}» не распознана как .csv или '<таблица> после <файлы>'")

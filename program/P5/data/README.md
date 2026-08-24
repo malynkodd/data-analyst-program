@@ -29,6 +29,34 @@
 | `raw/payments.csv` | Факт: `loan_id, installment_no, paid_date, extended, extended_due_date`. Пустой `paid_date` — не оплачено на дату выгрузки. 14751 строк. | **нет** |
 | `raw/marketing_spend.csv` | Один общий маркетинговый бюджет периода (как в M11). 1 строка. | **нет** |
 
+## Закрыто турникетом (решения 51 и 53)
+
+| Файл | Что внутри |
+|---|---|
+| `answers.md.enc` | Разбор эталона: ответы, ранги, выбранные трактовки, разбор дефектов. Вынесен из `reference_answers.md`. |
+| `ref_business_metrics_p5.csv.enc` | Эталонная таблица `ref_business_metrics_p5.csv` — в этом проекте она и есть ответ на вопрос заказчика. |
+| `ref_default_comparison.csv.enc` | Эталонная таблица `ref_default_comparison.csv` — в этом проекте она и есть ответ на вопрос заказчика. |
+| `ref_funnel_metrics.csv.enc` | Эталонная таблица `ref_funnel_metrics.csv` — в этом проекте она и есть ответ на вопрос заказчика. |
+| `ref_vintage.csv.enc` | Эталонная таблица `ref_vintage.csv` — в этом проекте она и есть ответ на вопрос заказчика. |
+
+Открывается только после сохранённой попытки, проход пишется в
+`research/attempts.md`:
+
+```
+> python tools\vault.py open <путь без .enc> --attempt <файл вашей попытки>
+```
+
+Эталонной таблице нужен файл на диске, а не вывод в консоль — её
+читает `compare_csv.py`, а не человек. Для этого у `open` есть `--to`:
+
+```
+> python tools\vault.py open <путь без .enc> --attempt <файл> --to <папка>\unlocked\<имя>
+```
+
+Каталог `unlocked/` — в `.gitignore`. Раздел «Проверка строк» ниже
+сверяет закрытые таблицы через тот же турникет, поэтому закрытие
+файла не отключает проверку (`tools/check_consistency.py`).
+
 ## Проверка строк
 
 | Файл | Строк |

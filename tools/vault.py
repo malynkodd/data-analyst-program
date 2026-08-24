@@ -44,6 +44,13 @@
 и должен остановить. После проверки он дописывает строку в
 `research/attempts.md` и печатает содержимое в консоль, не создавая
 расшифрованного файла на диске.
+
+**Исключение `--to` (решение 53).** Эталон, который читает не человек, а
+скрипт, в консоли бесполезен: `compare_csv.py` сверяет файл с файлом.
+Для таких случаев `--to` записывает содержимое по указанному пути после
+той же проверки попытки и той же записи в журнал. Каталоги `unlocked/`
+внесены в `.gitignore`: расшифрованный эталон живёт на диске одного
+человека и в репозиторий не попадает.
 """
 
 from __future__ import annotations
@@ -156,7 +163,7 @@ def _significant(text: str) -> int:
     return len(re.sub(r"\s+", "", "\n".join(lines)))
 
 
-def open_(path: Path, attempt: Path) -> int:
+def open_(path: Path, attempt: Path, to: Path | None = None) -> int:
     rel = path.relative_to(ROOT).as_posix()
     enc = locked_path(path)
     if not enc.exists():
@@ -185,8 +192,19 @@ def open_(path: Path, attempt: Path) -> int:
             f"| {stamp} | `{rel}` | `{_short(attempt)}` | {size} |\n"
         )
     print(f"[журнал] запись добавлена в {JOURNAL.relative_to(ROOT).as_posix()}")
+    payload = _xor(enc.read_bytes(), rel)
+    if to is not None:
+        to.parent.mkdir(parents=True, exist_ok=True)
+        to.write_bytes(payload)
+        print(f"[файл] содержимое записано в {_short(to)}")
+        print(
+            "Файл на диске нужен там, где эталон читает не человек, а скрипт "
+            "(`compare_csv.py`). Каталог `**/unlocked/` в `.gitignore`: "
+            "расшифрованный эталон не коммитится."
+        )
+        return 0
     print("=" * 72)
-    print(_xor(enc.read_bytes(), rel).decode("utf-8"))
+    print(payload.decode("utf-8"))
     return 0
 
 
@@ -205,6 +223,11 @@ def main() -> int:
     parser.add_argument("command", choices=["list", "lock", "open", "status"])
     parser.add_argument("path", nargs="?")
     parser.add_argument("--attempt", help="файл вашей попытки")
+    parser.add_argument(
+        "--to",
+        help="куда записать содержимое вместо печати в консоль — нужно там, "
+             "где эталон читает скрипт, а не человек (каталог unlocked/)",
+    )
     args = parser.parse_args()
 
     if args.command in {"list", "status"}:
@@ -218,7 +241,11 @@ def main() -> int:
     if not args.attempt:
         print("нужен --attempt <файл вашей попытки>")
         return 1
-    return open_(target, Path(args.attempt).resolve())
+    return open_(
+        target,
+        Path(args.attempt).resolve(),
+        Path(args.to).resolve() if args.to else None,
+    )
 
 
 if __name__ == "__main__":

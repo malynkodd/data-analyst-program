@@ -26,6 +26,31 @@ product/social/marketing), а не на готовые формулировки 
 | `ref_by_store.csv` | 12 строк — по одной на точку: `net_revenue`, `gross_revenue`, `avg_weekly_flat26`, `avg_weekly_excl_closed`. | да |
 | `raw/sales_transactions.csv` | 57619 строк: `tx_id, store_id, city, street, tx_date, amount`. Четыре встроенных дефекта — см. `step-00.md`. | **нет** — создаётся генератором |
 
+## Закрыто турникетом (решения 51 и 53)
+
+| Файл | Что внутри |
+|---|---|
+| `answers.md.enc` | Разбор эталона: ответы, ранги, выбранные трактовки, разбор дефектов. Вынесен из `reference_answers.md`. |
+| `ref_by_store.csv.enc` | Эталонная таблица `ref_by_store.csv` — в этом проекте она и есть ответ на вопрос заказчика. |
+
+Открывается только после сохранённой попытки, проход пишется в
+`research/attempts.md`:
+
+```
+> python tools\vault.py open <путь без .enc> --attempt <файл вашей попытки>
+```
+
+Эталонной таблице нужен файл на диске, а не вывод в консоль — её
+читает `compare_csv.py`, а не человек. Для этого у `open` есть `--to`:
+
+```
+> python tools\vault.py open <путь без .enc> --attempt <файл> --to <папка>\unlocked\<имя>
+```
+
+Каталог `unlocked/` — в `.gitignore`. Раздел «Проверка строк» ниже
+сверяет закрытые таблицы через тот же турникет, поэтому закрытие
+файла не отключает проверку (`tools/check_consistency.py`).
+
 ## Проверка строк
 
 Числа сверяются `tools/check_consistency.py` с фактическими файлами.
