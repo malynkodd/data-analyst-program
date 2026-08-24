@@ -26,7 +26,7 @@ def test_names_come_from_blueprint_verbatim() -> None:
     catalog = repo.catalog()
     assert catalog["M3"]["name"] == "SQL"
     assert catalog["M4"] == {"name": "Power BI", "hours": "27–36"}
-    assert catalog["M5"]["hours"] == "45–56"  # вилка решения 41, не 80–120
+    assert catalog["M5"]["hours"] == "57–71"  # вилка решения 50, не 80–120
     assert catalog["P1"]["name"] == "Какая точка худшая"
     assert catalog[repo.CAREER]["hours"] == "8–11"  # вилка решения 37
 
@@ -94,12 +94,12 @@ def test_repeated_field_is_kept_whole() -> None:
     assert repo.step_skills(header) == ["G2", "G3"]
 
 
-def test_every_one_of_36_skills_is_closed_by_a_step() -> None:
+def test_every_one_of_46_skills_is_closed_by_a_step() -> None:
     """Та же связь, которую сторожит check_skill_ids() репозитория."""
     mapping = repo.skill_map()
     missing = [s["id"] for s in repo.skills() if s["id"] not in mapping]
     assert not missing, f"умения без единого шага: {missing}"
-    assert len(repo.skills()) == 36
+    assert len(repo.skills()) == 46  # 36 до решения 50, +10 новых умений
 
 
 def test_skill_statement_comes_from_blueprint() -> None:
