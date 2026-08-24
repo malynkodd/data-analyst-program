@@ -502,8 +502,9 @@ def check_calibration_count(blueprint_text: str, claude_text: str) -> None:
 
 PROSE_CORE = re.compile(rf"ядро \(([^)]+)\) = (\d+){DASH}(\d+) ч")
 PROSE_REST = re.compile(
-    rf"обвязка\s+\((\d+){DASH}(\d+)\),\s+портфолио\s+\((\d+){DASH}(\d+)\)\s+"
-    rf"и\s+сборка артефактов\s+\((\d+){DASH}(\d+)\)"
+    rf"обвязка\s+\((\d+){DASH}(\d+)\),\s+портфолио\s+\((\d+){DASH}(\d+)\),\s+"
+    rf"сборка артефактов\s+\((\d+){DASH}(\d+)\)\s+"
+    rf"и\s+возвратный\s+контроль\s+\((\d+){DASH}(\d+)\)"
 )
 PROSE_TOTAL_61 = re.compile(
     rf"Официальный итог программы — сумма этой таблицы, (\d+){DASH}(\d+) ч"
@@ -579,31 +580,35 @@ def check_part61_prose(blueprint_text: str) -> None:
 
     portfolio = [r for r in rows if re.fullmatch(r"P\d", r[0].split()[0] if r[0].split() else "")]
     career = [r for r in rows if CAREER_ROW_MARK in r[0]]
+    review = [r for r in rows if REVIEW_ROW_MARK in r[0]]
     p_low, p_high = sum(r[1] for r in portfolio), sum(r[2] for r in portfolio)
     c_low, c_high = sum(r[1] for r in career), sum(r[2] for r in career)
+    r_low, r_high = sum(r[1] for r in review), sum(r[2] for r in review)
     t_low, t_high = sum(r[1] for r in rows), sum(r[2] for r in rows)
-    o_low, o_high = t_low - core_low - p_low - c_low, t_high - core_high - p_high - c_high
+    o_low = t_low - core_low - p_low - c_low - r_low
+    o_high = t_high - core_high - p_high - c_high - r_high
 
     m = PROSE_REST.search(part61)
     if not m:
         fail(
-            "6.1, абзац «Сверка с CLAUDE.md»: не найдено "
-            "«обвязка (N–M), портфолио (N–M) и сборка артефактов (N–M)»"
+            "6.1, абзац «Сверка с CLAUDE.md»: не найдено «обвязка (N–M), "
+            "портфолио (N–M), сборка артефактов (N–M) и возвратный контроль (N–M)»"
         )
     else:
         got = tuple(int(g) for g in m.groups())
-        want = (o_low, o_high, p_low, p_high, c_low, c_high)
+        want = (o_low, o_high, p_low, p_high, c_low, c_high, r_low, r_high)
         if got != want:
+            g = [f"{got[i]}{DASH}{got[i + 1]}" for i in range(0, 8, 2)]
+            w = [f"{want[i]}{DASH}{want[i + 1]}" for i in range(0, 8, 2)]
             fail(
-                f"6.1, проза: обвязка/портфолио/сборка заявлены "
-                f"{got[0]}{DASH}{got[1]} / {got[2]}{DASH}{got[3]} / {got[4]}{DASH}{got[5]}, "
-                f"а таблица даёт {want[0]}{DASH}{want[1]} / {want[2]}{DASH}{want[3]} / "
-                f"{want[4]}{DASH}{want[5]}"
+                f"6.1, проза: обвязка/портфолио/сборка/возврат заявлены "
+                f"{' / '.join(g)}, а таблица даёт {' / '.join(w)}"
             )
         else:
             ok(
                 f"6.1, проза: обвязка {o_low}{DASH}{o_high}, портфолио {p_low}{DASH}{p_high}, "
-                f"сборка {c_low}{DASH}{c_high} — совпадают с таблицей"
+                f"сборка {c_low}{DASH}{c_high}, возвратный контроль {r_low}{DASH}{r_high} "
+                f"— совпадают с таблицей"
             )
 
     m = PROSE_TOTAL_61.search(part61)
@@ -654,11 +659,16 @@ def check_part61_prose(blueprint_text: str) -> None:
         ok(f"6.2, проза: официальный итог {t_low}{DASH}{t_high} совпадает с частью 6.1")
 
 
+PRACTICE_SPLIT = re.compile(
+    r"Новых заданий (\d+), возвратных (\d+), всего сделанных (\d+)"
+)
+
 PRACTICE_LABEL = {
     "M0": "M0", "M1": "M1", "M13": "M13", "M2": "M2", "M3": "M3", "M10": "M10",
     "M4": "M4", "M15": "M15", "M16": "M16", "M12": "M12", "M5": "M5", "M6": "M6",
     "M7": "M7", "M8": "M8", "M9": "M9", "M11": "M11", "M14": "M14",
     "career": "Блок «Выход»",
+    "review": "Возвратный контроль",
 }
 
 
@@ -732,21 +742,61 @@ def check_practice_volume(blueprint_text: str) -> None:
             f"пересчёт даёт {t_steps} / {t_tasks}"
         )
 
+    # Разделение «новые / возвратные» — не украшение, а условие честности
+    # метрики: возвратное задание меряет удержание, а не охват, и складывать
+    # его с новым в одно число значило бы завысить объём программы на
+    # величину повторов (решение 49).
+    review_tasks = counted.get(REVIEW_DIR_NAME, (0, 0))[1]
+    m = PRACTICE_SPLIT.search(part65)
+    if m is None:
+        problems.append(
+            "не найдена строка «Новых заданий N, возвратных M, всего сделанных K»"
+        )
+    else:
+        want = (t_tasks - review_tasks, review_tasks, t_tasks)
+        got = tuple(int(g) for g in m.groups())
+        if got != want:
+            problems.append(
+                f"разделение заявлено {got[0]} новых / {got[1]} возвратных / "
+                f"{got[2]} всего, пересчёт даёт {want[0]} / {want[1]} / {want[2]}"
+            )
+
     if problems:
         for p in problems:
             fail(f"6.5 объём практики: {p}")
     else:
         ok(
-            f"6.5 объём практики: {t_steps} шагов и {t_tasks} заданий — "
+            f"6.5 объём практики: {t_steps} шагов и {t_tasks} заданий "
+            f"({t_tasks - review_tasks} новых, {review_tasks} возвратных) — "
             f"таблица совпадает с пересчётом по {len(counted)} каталогам"
         )
 
 
 CAREER_DIR_NAME = "career"
 CAREER_ROW_MARK = "Сборка резюме"
+REVIEW_DIR_NAME = "review"
+REVIEW_ROW_MARK = "Возвратный контроль"
 
 
 def check_career_hours(blueprint_text: str) -> None:
+    """Блок «Выход» — program/career/, строка «Сборка резюме...» части 6.1."""
+    _check_block_hours(blueprint_text, CAREER_DIR_NAME, CAREER_ROW_MARK)
+
+
+def check_review_hours(blueprint_text: str) -> None:
+    """Блок возвратного контроля — program/review/, строка «Возвратный
+    контроль» части 6.1 (решение 49).
+
+    Та же причина, что у career: каталог назван не M<номер>, потому что имя
+    модуля включило бы его в проверки, написанные под модули (покрытие
+    умений, декларация шагов, порядок загрузки данных), а точка не несёт
+    умения и шагом не является. Цена отказа от имени модуля оплачена здесь:
+    часы блока сверяются с построчной суммой его точек, а не остаются вне
+    контроля."""
+    _check_block_hours(blueprint_text, REVIEW_DIR_NAME, REVIEW_ROW_MARK)
+
+
+def _check_block_hours(blueprint_text: str, dir_name: str, row_mark: str) -> None:
     """То же, что check_module_hours(), но для блока «Выход»
     (program/career/) — он не модуль и под маску [MP]* не попадает
     (решение 37).
@@ -761,15 +811,15 @@ def check_career_hours(blueprint_text: str) -> None:
     нет и не будет."""
     if not PROGRAM_DIR.exists():
         return
-    career = PROGRAM_DIR / CAREER_DIR_NAME
-    if not career.is_dir():
+    block = PROGRAM_DIR / dir_name
+    if not block.is_dir():
         return
 
     part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
     bracket: tuple[int, int] | None = None
     mark: str | None = None
     for line in part61.splitlines():
-        if not line.startswith("|") or CAREER_ROW_MARK not in line:
+        if not line.startswith("|") or row_mark not in line:
             continue
         cells = [c.strip() for c in line.strip("|").split("|")]
         if len(cells) < 2:
@@ -781,13 +831,13 @@ def check_career_hours(blueprint_text: str) -> None:
 
     if bracket is None:
         fail(
-            f"часть 6.1 blueprint: не найдена строка «{CAREER_ROW_MARK}...» с "
-            f"вилкой часов блока program/{CAREER_DIR_NAME}/"
+            f"часть 6.1 blueprint: не найдена строка «{row_mark}...» с "
+            f"вилкой часов блока program/{dir_name}/"
         )
         return
 
     steps = sorted(
-        f for f in career.glob("step-*.md")
+        f for f in block.glob("step-*.md")
         if (m := STEP_FILE.match(f.name)) and int(m.group(1)) > 0
     )
     pairs: list[tuple[float, float]] = []
@@ -801,19 +851,19 @@ def check_career_hours(blueprint_text: str) -> None:
             no_hours.append(f.name)
     if no_hours:
         fail(
-            f"{CAREER_DIR_NAME}: шаги без разбираемой строки 'Время: N{DASH}M ч': "
+            f"{dir_name}: шаги без разбираемой строки 'Время: N{DASH}M ч': "
             f"{', '.join(no_hours)}"
         )
         return
     if not pairs:
-        ok(f"{CAREER_DIR_NAME}: содержательных шагов с часами не найдено")
+        ok(f"{dir_name}: содержательных шагов с часами не найдено")
         return
 
     low = sum(p[0] for p in pairs)
     high = sum(p[1] for p in pairs)
     b_low, b_high = bracket
     label = (
-        f"{CAREER_DIR_NAME}: сумма {len(pairs)} шагов {_fmt(low)}{DASH}{_fmt(high)} ч "
+        f"{dir_name}: сумма {len(pairs)} шагов {_fmt(low)}{DASH}{_fmt(high)} ч "
         f"при вилке 6.1 {b_low}{DASH}{b_high}"
     )
     if low == b_low and high == b_high and mark:
@@ -1834,6 +1884,7 @@ def main() -> int:
     check_part2_hours(blueprint_text)
     check_module_hours(blueprint_text)
     check_career_hours(blueprint_text)
+    check_review_hours(blueprint_text)
     check_part61_prose(blueprint_text)
     check_practice_volume(blueprint_text)
     check_calibration_count(blueprint_text, claude_text)

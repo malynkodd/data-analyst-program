@@ -24,6 +24,9 @@ BLUEPRINT = ROOT / "design" / "blueprint.md"
 # Порядок разделов дерева: модули натуральной сортировкой, затем проекты,
 # затем блок «Выход». Тот же порядок, что в части 6.1 blueprint.
 CAREER = "career"
+# Блок возвратного контроля (решение 49): тоже не модуль и тоже не имеет
+# кода в 6.1 — привязывается к строке таблицы по тексту, как и career.
+REVIEW = "review"
 
 STEP_FILE = re.compile(r"^step-(\d+)\.md$")
 
@@ -38,7 +41,11 @@ HEADER_FIELD = re.compile(r"^([А-ЯЁA-Z][^:]{1,70}):\s*(.*)$")
 
 # Поля, которые интерфейс показывает в шапке шага, в этом порядке.
 HEADER_SHOWN = ("Умение", "Модуль", "Блок", "Требуется до этого", "Время")
-SECTION = re.compile(r"^##\s+(\d+\.\d+)\.\s*(.*)$", re.MULTILINE)
+# Разделы шага нумерованы `1.1`…`1.8`; разделы возвратной точки — одним
+# числом (`## 3. Задания`), потому что точка не шаг и восьми разделов не
+# имеет. Оба вида ловятся одним выражением; подписи SECTION_HINTS есть
+# только у первых, у вторых заголовок говорит сам за себя.
+SECTION = re.compile(r"^##\s+(\d+(?:\.\d+)?)\.\s*(.*)$", re.MULTILINE)
 BACKTICKED = re.compile(r"`([^`]+)`")
 
 # Команда проверки внутри блока кода шага. Приглашающая `> ` (M4, M14,
@@ -47,9 +54,11 @@ CHECK_LINE = re.compile(r"^\s*(?:[>$]\s+)?(python3?)\s+(\S*check_\w+\.py.*)$")
 
 
 def _natural_key(name: str) -> tuple[int, int, str]:
-    """M0..M16 перед P1..P6, `career` последним; числа — числами."""
+    """M0..M16 перед P1..P6, затем `career` и `review`; числа — числами."""
     if name == CAREER:
         return (2, 0, name)
+    if name == REVIEW:
+        return (2, 1, name)
     m = re.fullmatch(r"([MP])(\d+)", name)
     if not m:
         return (3, 0, name)
@@ -322,6 +331,7 @@ PROJECT_NAME = re.compile(r"^P\d+\s+«([^»]+)»", re.MULTILINE)
 # кодом: в 6.1 у него нет кода, и привязать её к `career` можно только по
 # тексту (решение 37 — блок намеренно не модуль).
 CAREER_ROW = "Сборка резюме"
+REVIEW_ROW = "Возвратный контроль"
 
 
 def _blueprint_text() -> str:
@@ -360,6 +370,8 @@ def _catalog_cached(mtime: float) -> dict[str, dict]:
             out[m.group(1)] = {"name": m.group(2).strip(), "hours": hours}
         elif label.startswith(CAREER_ROW):
             out[CAREER] = {"name": "Выход: резюме, профиль, режим поиска", "hours": hours}
+        elif label.startswith(REVIEW_ROW):
+            out[REVIEW] = {"name": "Возвратный контроль: R1–R5", "hours": hours}
 
     # У проектов в части 6.1 стоит только код. Название проекта живёт в
     # его собственной декларации, в виде `P1 «Какая точка худшая»`.
@@ -395,6 +407,10 @@ def _stages_cached(mtime: float) -> tuple[dict, ...]:
                 codes.append(code)
         if "сборка артефактов" in cells[1].lower():
             codes.append(CAREER)
+        # Точки R1…R5 названы в 6.2 внутри этапов, а не отдельной строкой:
+        # блок один, а стоит он в четырёх этапах из шести.
+        if re.search(r"R\d", cells[1]) and REVIEW not in codes:
+            codes.append(REVIEW)
         stages.append(
             {
                 "number": int(m.group(1)),
@@ -432,7 +448,9 @@ def stage_order() -> list[str]:
 # Подпись человеческим языком к номеру раздела. Это подпись интерфейса, а
 # не содержание шага: сам заголовок берётся из файла как есть, подпись
 # только объясняет, зачем читателю этот раздел. Номера у всех 73 шагов
-# одинаковые — их задаёт раздел 1 скилла curriculum-design.
+# одинаковые — их задаёт раздел 1 скилла curriculum-design. У пяти
+# возвратных точек program/review/ разделы нумерованы одним числом
+# (решение 49), подписей у них нет и SECTION_HINTS для них пуст.
 SECTION_HINTS = {
     "1.1": "зачем этот шаг и что вы будете уметь после него",
     "1.2": "минимум теории, которого хватает для задания",
@@ -560,7 +578,7 @@ def skill_map() -> dict[str, list[str]]:
 
 # ------------------------------------------------------- предусловия шага
 
-STEP_REF_FULL = re.compile(r"(?:program[/\\])?([MP]\d+|career)[/\\]step-(\d+)\.md")
+STEP_REF_FULL = re.compile(r"(?:program[/\\])?([MP]\d+|career|review)[/\\]step-(\d+)\.md")
 STEP_REF_LOCAL = re.compile(r"(?<![/\\])\bstep-(\d+)\.md")
 STEP_REF_DOT = re.compile(r"\b([MP]\d+)\.(\d+)\b")
 MODULE_REF = re.compile(r"\b([MP]\d+)\b")

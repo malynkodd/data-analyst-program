@@ -28,6 +28,13 @@ ROOT = Path(__file__).resolve().parent.parent
 PROGRAM = ROOT / "program"
 
 TASK_HEADING = re.compile(r"^## 1\.4\.")
+# Возвратные точки (program/review/) — не шаги: восьми разделов шага у них
+# нет, и раздел заданий стоит под своим номером (решение 49). Заголовок
+# ищется по слову, а не по номеру, потому что номер раздела отличается от
+# точки к точке — у R3 перед заданиями есть раздел «Что точка сознательно
+# не проверяет», у остальных нет.
+REVIEW_TASK_HEADING = re.compile(r"^## \d+\. Задания")
+REVIEW_DIR = "review"
 NEXT_HEADING = re.compile(r"^## ")
 TASK_ITEM = re.compile(r"^(\d+)\. ")
 
@@ -35,17 +42,20 @@ TASK_ITEM = re.compile(r"^(\d+)\. ")
 ORDER = [
     "M0", "M1", "M13", "M2", "M3", "M10", "P1", "P2",
     "M4", "M15", "M16", "M12", "P3", "M5", "M6", "M7", "P4",
-    "M8", "M9", "M11", "P5", "M14", "P6", "career",
+    "M8", "M9", "M11", "P5", "M14", "P6", "career", "review",
 ]
 
 
 def tasks_in(path: Path) -> tuple[int, bool]:
     """(сколько заданий, прозой ли). Прозой — значит одно, без нумерации."""
+    heading = (
+        REVIEW_TASK_HEADING if path.parent.name == REVIEW_DIR else TASK_HEADING
+    )
     inside = False
     count = 0
     body = 0
     for line in path.read_text(encoding="utf-8").splitlines():
-        if TASK_HEADING.match(line):
+        if heading.match(line):
             inside = True
             continue
         if inside and NEXT_HEADING.match(line):

@@ -133,3 +133,28 @@ def test_prerequisites_never_point_at_a_missing_file() -> None:
             for sid in repo.prerequisites(module, st.header)["steps"]:
                 mod, _, name = sid.partition("/")
                 assert (repo.PROGRAM / mod / f"{name}.md").is_file(), f"{st.step_id} → {sid}"
+
+
+def test_review_block_is_read_from_blueprint_like_career() -> None:
+    """Возвратный контроль — не модуль, но в дереве обязан быть (решение 49).
+
+    Блок назван `review`, а не `M17`, по той же причине, что `career`:
+    имя вида `M<номер>` включило бы его в проверки, написанные под модули.
+    Цена этого отказа — что связь с blueprint держится текстом строки 6.1,
+    а не кодом, и рвётся молча при переименовании. Тест сторожит связь.
+    """
+    catalog = repo.catalog()
+    assert repo.REVIEW in catalog, "строка «Возвратный контроль» в 6.1 не найдена"
+    assert catalog[repo.REVIEW]["hours"] == "18–23"  # вилка решения 49
+    assert repo.REVIEW in repo.stage_order(), "блок не попал ни в один этап 6.2"
+
+    numbers = [s.number for s in repo.steps(repo.REVIEW) if not s.is_declaration]
+    assert numbers == [1, 2, 3, 4, 5], "пять точек R1–R5 не читаются как шаги"
+
+
+def test_review_point_sections_are_parsed_without_step_numbering() -> None:
+    """Разделы точки нумерованы одним числом, а не `1.1`…`1.8`."""
+    text = repo.step(repo.REVIEW, 1).path.read_text(encoding="utf-8")
+    parsed = repo.sections(text)
+    assert parsed, "разделы возвратной точки не распарсились"
+    assert any("Задания" in body.splitlines()[0] for body in parsed.values())
