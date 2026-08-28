@@ -74,6 +74,34 @@ DAU за месяц — не MAU: один человек, зашедший 20 �
 продуктовыми решениями; (в) она опережает выручку, а не следует за ней.
 Выручка сама NSM не бывает — она следствие.
 
+**Справочник.**
+
+- [Amplitude, глоссарий: Daily Active Users](https://amplitude.com/glossary/terms/daily-active-users)
+  и [Average Revenue Per User](https://amplitude.com/glossary/terms/average-revenue-per-user)
+  — определения DAU и ARPU у вендора, чей продукт эти метрики и считает.
+- [Amplitude, «You're Measuring Daily Active Users Wrong»](https://amplitude.com/blog/measuring-active-users)
+  — почему «сумма DAU за месяц ≠ MAU» и что такое sticky в терминах
+  отношения DAU/MAU.
+- [ProdPad, глоссарий: AARRR](https://www.prodpad.com/glossary/aarrr/)
+  — каркас из пяти этапов (Acquisition, Activation, Retention,
+  Referral, Revenue), в который укладываются все посчитанные метрики.
+
+**AARRR как способ читать свой же набор метрик.** Новых расчётов он не
+добавляет — он даёт язык, на котором про них спрашивают. Метрики
+шагов 01–06 раскладываются по пяти этапам так:
+
+| Этап | Метрики этого модуля | Где считались |
+|---|---|---|
+| Acquisition | CPL, CPA, CAC | `step-01.md` |
+| Activation | конверсия в первую оплату | `step-04.md` |
+| Retention | Retention D30, Churn D30, sticky, DAU/WAU/MAU | `step-03.md`, `step-04.md` |
+| Referral | — не считается: в датасете нет реферального канала | — |
+| Revenue | ARPU, ARPPU, LTV, ROAS, ROMI, ROI, MoM, доля повторной выручки | `step-02.md`, `step-04.md` |
+
+Пустая строка Referral — не пробел изложения, а свойство датасета, и на
+собеседовании такой ответ («этот этап у меня не измерен, потому что в
+данных нет источника перехода») сильнее, чем придуманное число.
+
 ## 1.3. Разобранный пример на сквозном датасете
 
 Прогон эталона на машине автора 2026-08-24

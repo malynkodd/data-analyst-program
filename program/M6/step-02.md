@@ -89,6 +89,16 @@
 разделять по одному — фиксировать своё определение, менять одно условие
 и смотреть, куда двинулось число.
 
+**Справочник.**
+
+- [pandas: `merge`, параметр `indicator`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html)
+  — колонка `_merge` со значениями `left_only`/`right_only`/`both` и
+  есть готовый отчёт о том, что не сошлось, — её стоит строить до того,
+  как считать расхождение вручную.
+- [pandas: `drop_duplicates`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.drop_duplicates.html)
+  — параметры `subset` и `keep`; дубль по ключу и дубль по всей строке
+  — разные события с разными причинами.
+
 ## 1.3. Разобранный пример на сквозном датасете
 
 Прогон на машине автора 2026-08-20.
