@@ -22,7 +22,7 @@ curriculum-design. Команд не содержит (решение 20 `design
 
 | Шаг | Артефакт | Умение части 1 blueprint |
 |---|---|---|
-| `step-01.md` | `work\cv.md` — резюме на одну страницу | — (карьерный артефакт, вне 36 ID) |
+| `step-01.md` | `work\cv.md` — резюме на одну страницу | — (карьерный артефакт, вне 46 ID) |
 | `step-02.md` | `work\portfolio_readme.md`, `work\summary_ru.md`, `work\summary_en.md` | **K2** |
 | `step-03.md` | `work\vacancy_notes.md` + продолжение `program\M14\work\tracker.csv` | **K1**; первое условие критерия **J3** |
 
