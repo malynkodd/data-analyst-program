@@ -101,22 +101,42 @@ def main() -> int:
         elif r["status"] == "declined":
             declined[code] += 1
 
+    # Share of Total — доля категории в обороте по ВСЕМ категориям.
+    # Знаменатель считается вне контекста строки: это и есть то, что в
+    # DAX делает ALL(mcc_categories). Мера добавлена решением 54
+    # (2026-08-28): до неё ALL объяснялся в 1.2 и не проверялся ни одним
+    # критерием, то есть был теорией без приёмки.
+    grand_total = sum(total.values())
+
     by_cat = []
     for code, name in cat_name.items():
         rate = Decimal(declined[code]) / Decimal(count[code])
+        share = Decimal(total[code]) / Decimal(grand_total)
         by_cat.append((
             name,
             q(total[code], "0.01"),
             q(settled[code], "0.01"),
             count[code],
             q(rate, "0.0001"),
+            q(share, "0.0001"),
         ))
     by_cat.sort(key=lambda t: t[2], reverse=True)
     write_ref(
         "by_category.csv",
-        ["category_name", "Total Amount", "Settled Amount", "Tx Count", "Decline Rate"],
-        [[n, f"{t}", f"{s}", str(c), f"{d}"] for n, t, s, c, d in by_cat],
+        [
+            "category_name",
+            "Total Amount",
+            "Settled Amount",
+            "Tx Count",
+            "Decline Rate",
+            "Share of Total",
+        ],
+        [
+            [n, f"{t}", f"{s}", str(c), f"{d}", f"{sh}"]
+            for n, t, s, c, d, sh in by_cat
+        ],
     )
+    print(f"Share of Total: сумма долей = {sum(row[5] for row in by_cat)}")
 
     # ---- визуал городов: город × Total Amount. Заведён ради условия 3
     # критерия C2 (решение 22): файл следующего месяца содержит кириллицу,
