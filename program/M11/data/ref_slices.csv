@@ -1,0 +1,14 @@
+срез,метрика,значение,n
+principal_do_2694,fpd,0.2250,711
+principal_do_2694,fpd30,0.0591,711
+principal_2695_4749,fpd,0.2099,710
+principal_2695_4749,fpd30,0.0620,710
+principal_ot_4750,fpd,0.2236,711
+principal_ot_4750,fpd30,0.0478,711
+principal_do_2694,roll_rate_30_60,0.6000,35
+principal_2695_4749,roll_rate_30_60,0.6757,37
+principal_ot_4750,roll_rate_30_60,0.6000,25
+score_0_499,approval_rate,0.0000,185
+score_500_599,approval_rate,0.0000,859
+score_600_699,approval_rate,0.9955,1345
+score_700_plus,approval_rate,1.0000,892

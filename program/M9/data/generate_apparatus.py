@@ -12,6 +12,9 @@
   так, что относительная разница велика (+17.8%), а статистической
   значимости нет: это и есть предмет шага.
 * `pairs_apparatus.csv` — 20 месяцев: расходы на рекламу и число заявок.
+* `means_apparatus.csv` — средний чек 40 оплат того же A/B-теста, по 20
+  в каждой группе. Нужен для t-критерия: доли сравниваются z, средние —
+  t, и это две разные проверки, а не одна с разными названиями.
 
 Детерминирован — `SEED` фиксирован до первого обращения к `random`.
 
@@ -57,10 +60,27 @@ def main() -> int:
             month = f"{2025 + index // 12}-{index % 12 + 1:02d}"
             writer.writerow([month, x, y])
 
+    # Средние чеки: группа B в среднем выше на ~90 грн при разбросе ~360 —
+    # эффект есть, но выборок по 20 наблюдений на него мало. Розыгрыш стоит
+    # ПОСЛЕ pairs_apparatus.csv намеренно: вставленный раньше, он сдвинул бы
+    # поток random и изменил r, на котором стоят числа раздела 1.3.
+    checks_a = [round(random.gauss(1180, 360), 2) for _ in range(20)]
+    checks_b = [round(random.gauss(1270, 360), 2) for _ in range(20)]
+    with (HERE / "means_apparatus.csv").open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh, lineterminator='\n')
+        writer.writerow(["variant", "check_uah"])
+        for value in checks_a:
+            writer.writerow(["A", value])
+        for value in checks_b:
+            writer.writerow(["B", value])
+
     print("SEED =", SEED)
     print("ab_apparatus.csv:", len(AB_ROWS), "строки")
     for row in AB_ROWS:
         print(f"  {row[0]}  users={row[1]}  converted={row[2]}")
+    print("means_apparatus.csv:", len(checks_a) + len(checks_b), "строк")
+    print("  A:", checks_a)
+    print("  B:", checks_b)
     print("pairs_apparatus.csv:", len(xs), "строк")
     print("  ad_spend_kuah:", xs)
     print("  leads:", ys)

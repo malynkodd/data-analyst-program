@@ -1,6 +1,6 @@
 """Эталон шага M9.01 «Аппарат, которым меряются ловушки» (умение F5).
 
-Считает шестнадцать величин и пишет `ref_apparatus.csv`. Всё — на
+Считает двадцать четыре величины и пишет `ref_apparatus.csv`. Всё — на
 стандартной библиотеке: `statistics.NormalDist` даёт и функцию
 распределения (`cdf`), и обратную к ней (`inv_cdf`), поэтому ни `scipy`,
 ни `numpy` модулю не нужны и в окружение не добавляются.
@@ -29,7 +29,22 @@
   мощности 0.80 и минимально различимом эффекте 1 процентный пункт от
   базовой конверсии группы A;
 * **корреляция** — Пирсона, по 20 парам `pairs_apparatus.csv`, без
-  исключения выбросов.
+  исключения выбросов;
+* **хи-квадрат** — Пирсона по таблице 2×2 того же A/B-теста
+  (сконвертировал / не сконвертировал × A / B), без поправки Йейтса.
+  Ожидаемые частоты берутся из маргиналов: `E = строка · столбец / N`.
+  Порог не берётся из таблицы: при одной степени свободы χ² — это ровно
+  квадрат стандартной нормальной величины, поэтому критическое значение
+  равно `z_crit²` (`1.9600² = 3.8415`). Скрипт печатает обе величины
+  рядом именно затем, чтобы происхождение порога было видно, а не
+  заучено;
+* **t-критерий** — для двух независимых средних (`means_apparatus.csv`,
+  по 20 наблюдений на группу), объединённая дисперсия (pooled), df =
+  n_A + n_B − 2 = 38. Критическое значение t для df = 38 при α = 0.05
+  двусторонней — **2.0244**; в стандартной библиотеке функции
+  распределения Стьюдента нет, поэтому порог берётся из таблицы
+  квантилей и записан в эталон явно, а не вычисляется. Это единственное
+  число шага, взятое не вызовом, — и потому названо здесь.
 
 Запуск из корня репозитория:
 
@@ -73,6 +88,50 @@ def se_proportion(p: float, n: int) -> float:
     return (p * (1 - p) / n) ** 0.5
 
 
+T_CRIT_DF38 = 2.0244  # квантиль t(38) для двустороннего α = 0.05, из таблицы
+
+
+def load_means() -> tuple[list[float], list[float]]:
+    with (HERE / "means_apparatus.csv").open(encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    return (
+        [float(r["check_uah"]) for r in rows if r["variant"] == "A"],
+        [float(r["check_uah"]) for r in rows if r["variant"] == "B"],
+    )
+
+
+def chi_square_2x2(cA: int, nA: int, cB: int, nB: int) -> float:
+    """Хи-квадрат Пирсона по таблице 2×2, без поправки Йейтса."""
+    observed = [
+        [cA, nA - cA],
+        [cB, nB - cB],
+    ]
+    total = nA + nB
+    col_conv = cA + cB
+    col_not = total - col_conv
+    expected = [
+        [nA * col_conv / total, nA * col_not / total],
+        [nB * col_conv / total, nB * col_not / total],
+    ]
+    return sum(
+        (observed[i][j] - expected[i][j]) ** 2 / expected[i][j]
+        for i in range(2)
+        for j in range(2)
+    )
+
+
+def t_two_means(a: list[float], b: list[float]) -> tuple[float, int, float, float]:
+    """t на объединённой дисперсии, df, средние двух групп."""
+    na, nb = len(a), len(b)
+    ma, mb = sum(a) / na, sum(b) / nb
+    ssa = sum((x - ma) ** 2 for x in a)
+    ssb = sum((x - mb) ** 2 for x in b)
+    df = na + nb - 2
+    s_pooled_sq = (ssa + ssb) / df
+    se = (s_pooled_sq * (1 / na + 1 / nb)) ** 0.5
+    return (mb - ma) / se, df, ma, mb
+
+
 def pearson(xs: list[float], ys: list[float]) -> float:
     n = len(xs)
     mx = sum(xs) / n
@@ -111,6 +170,12 @@ def main() -> int:
     ) ** 2
     n_needed = numerator / (p2 - p1) ** 2
 
+    chi2 = chi_square_2x2(cA, nA, cB, nB)
+    chi2_crit = z_crit ** 2
+
+    checks_a, checks_b = load_means()
+    t_stat, df, mean_a, mean_b = t_two_means(checks_a, checks_b)
+
     xs, ys = load_pairs()
     r = pearson(xs, ys)
 
@@ -131,6 +196,14 @@ def main() -> int:
         ("z_статистика", f"{z:.4f}"),
         ("p_value", f"{p_value:.4f}"),
         ("нужный_размер_группы", f"{int(-(-n_needed // 1))}"),
+        ("хи_квадрат", f"{chi2:.4f}"),
+        ("хи_квадрат_порог_df1", f"{chi2_crit:.4f}"),
+        ("хи_квадрат_равен_z_в_квадрате", f"{z ** 2:.4f}"),
+        ("средний_чек_A", f"{mean_a:.2f}"),
+        ("средний_чек_B", f"{mean_b:.2f}"),
+        ("t_статистика", f"{t_stat:.4f}"),
+        ("t_степеней_свободы", f"{df}"),
+        ("t_порог_двусторонний", f"{T_CRIT_DF38:.4f}"),
         ("корреляция_r", f"{r:.4f}"),
         ("r_квадрат", f"{r * r:.4f}"),
     ]
