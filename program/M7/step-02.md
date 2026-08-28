@@ -111,6 +111,9 @@ AS SELECT * FROM fintech.transactions_raw;
 | `fintech.transactions_optimized` существует, партиционирована по `txn_date` | видно в панели Details таблицы в консоли: `Partitioned by DAY on txn_date` | несоответствие означает пропущенный `PARTITION BY` |
 | строк в `transactions_optimized` | 4 386 000 | точное совпадение с `transactions_raw` — `CREATE TABLE AS SELECT` не должен терять строки |
 
+**Не сошлось — не переделывайте вслепую:** раздел 1.6 разбирает 2 ошибки
+этого шага, каждую с признаком, по которому её видно в своём результате.
+
 ## 1.6. Типичные ошибки
 
 Обе — не измерены прогоном (доступа к консоли нет, `step-00.md`), а
