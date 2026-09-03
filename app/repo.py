@@ -30,6 +30,16 @@ REVIEW = "review"
 
 STEP_FILE = re.compile(r"^step-(\d+)\.md$")
 
+# Шесть проектов портфолио написаны не шагами: весь текст проекта лежит в
+# одном `project.md` (решение 3, часть 6.5 blueprint — «у них нет шагов и
+# раздела 1.4, приёмка — acceptance criteria в project.md»). Файл имеет ту
+# же шапку и те же разделы `1.1`…, что шаг, и читается тем же разбором,
+# но содержательным шагом не считается: 90 шагов части 6.5 — это
+# `step-NN.md`, и приложение это число не раздувает.
+PROJECT_FILE = "project.md"
+PROJECT_NUMBER = 1
+IS_PROJECT = re.compile(r"^P\d+$")
+
 # Поле шапки — любая строка вида `Ключ: значение` в блоке сразу после
 # заголовка файла. Список ключей закрытым не делается: кроме четырёх
 # основных, шаги объявляют «Новые файлы, объявляемые этим шагом»,
@@ -45,7 +55,11 @@ HEADER_SHOWN = ("Умение", "Модуль", "Блок", "Требуется 
 # числом (`## 3. Задания`), потому что точка не шаг и восьми разделов не
 # имеет. Оба вида ловятся одним выражением; подписи SECTION_HINTS есть
 # только у первых, у вторых заголовок говорит сам за себя.
-SECTION = re.compile(r"^##\s+(\d+(?:\.\d+)?)\.\s*(.*)$", re.MULTILINE)
+# Буква после номера — вставленный позже раздел, который не сдвигает
+# нумерацию соседей: `## 1.2а. Происхождение данных` в P1 и P3. Без неё
+# «1.2а» разбиралось как раздел «1» с названием «2а. Происхождение
+# данных», и оглавление проекта показывало лишний пункт не на месте.
+SECTION = re.compile(r"^##\s+(\d+(?:\.\d+)?[а-яёa-z]?)\.\s*(.*)$", re.MULTILINE)
 BACKTICKED = re.compile(r"`([^`]+)`")
 
 # Команда проверки внутри блока кода шага. Приглашающая `> ` (M4, M14,
@@ -83,6 +97,7 @@ class Step:
     title: str
     header: dict[str, str] = field(default_factory=dict)
     is_declaration: bool = False
+    is_project: bool = False
 
     @property
     def step_id(self) -> str:
@@ -102,6 +117,23 @@ def modules() -> list[str]:
     return sorted(found, key=_natural_key)
 
 
+def step_path(module: str, number: int) -> Path | None:
+    """Файл шага по номеру, или `None`, если его нет.
+
+    Одно место, где номер превращается в путь: у проекта под номером 1
+    лежит `project.md`, у всех остальных — `step-NN.md`. Разошлись бы эти
+    два правила по вызовам — дерево, предусловия и запуск проверок начали
+    бы расходиться в том, что считается существующим файлом.
+    """
+    d = PROGRAM / module
+    if IS_PROJECT.match(module) and number == PROJECT_NUMBER:
+        path = d / PROJECT_FILE
+        if path.is_file():
+            return path
+    path = d / f"step-{number:02d}.md"
+    return path if path.is_file() else None
+
+
 def steps(module: str) -> list[Step]:
     d = PROGRAM / module
     out = []
@@ -110,13 +142,16 @@ def steps(module: str) -> list[Step]:
         if not m:
             continue
         out.append(_read_step(module, int(m.group(1)), f))
+    project = d / PROJECT_FILE
+    if IS_PROJECT.match(module) and project.is_file():
+        out.append(_read_step(module, PROJECT_NUMBER, project))
     return sorted(out, key=lambda s: s.number)
 
 
 def step(module: str, number: int) -> Step:
-    path = PROGRAM / module / f"step-{number:02d}.md"
-    if not path.is_file():
-        raise FileNotFoundError(f"нет файла {path.relative_to(ROOT)}")
+    path = step_path(module, number)
+    if path is None:
+        raise FileNotFoundError(f"нет файла program/{module}/step-{number:02d}.md")
     return _read_step(module, number, path)
 
 
@@ -163,6 +198,7 @@ def _read_step(module: str, number: int, path: Path) -> Step:
         title=title or path.name,
         header=header,
         is_declaration=(number == 0),
+        is_project=(path.name == PROJECT_FILE),
     )
 
 
@@ -331,6 +367,11 @@ PROJECT_NAME = re.compile(r"^P\d+\s+«([^»]+)»", re.MULTILINE)
 # кодом: в 6.1 у него нет кода, и привязать её к `career` можно только по
 # тексту (решение 37 — блок намеренно не модуль).
 CAREER_ROW = "Сборка резюме"
+# Пометка калибровки и вид часовой ячейки — те же, что читает
+# `check_calibration_count()` в `tools/check_consistency.py`. Здесь они
+# нужны, чтобы экран журнала печатал живое число, а не константу.
+CALIBRATION_MARK = "**Требуется**"
+HOURS_CELL = re.compile(r"^[\d.,]+(?:\s*[–—-]\s*[\d.,]+)?$")
 REVIEW_ROW = "Возвратный контроль"
 
 
@@ -428,6 +469,43 @@ def _stages_cached(mtime: float) -> tuple[dict, ...]:
 def stages() -> list[dict]:
     """Шесть этапов части 6.2 blueprint — порядок прохождения программы."""
     return [dict(s) for s in _stages_cached(BLUEPRINT.stat().st_mtime)]
+
+
+def totals() -> dict:
+    """Строка «Итого» таблицы 6.2: часы и недели всей программы.
+
+    Числа живут в blueprint и правятся решениями (55 — последнее). До
+    редизайна стартовый экран печатал их своей строкой в `app.js`, и та
+    отстала на два решения: «43–56 недель при 10 ч/нед» против 54–68 в
+    таблице. Строка удалена, число читается здесь.
+    """
+    for cells in _table_rows(_blueprint_text(), "6.2. Этапы и недели"):
+        if _clean(cells[0]).startswith("Итого"):
+            return {
+                "hours": _clean(cells[2]) if len(cells) > 2 else "",
+                "weeks_10": _clean(cells[3]) if len(cells) > 3 else "",
+                "weeks_25": _clean(cells[4]) if len(cells) > 4 else "",
+            }
+    return {"hours": "", "weeks_10": "", "weeks_25": ""}
+
+
+def calibration() -> dict:
+    """Сколько часовых вилок 6.1 помечены «требуется калибровка».
+
+    Тот же подсчёт, что `check_calibration_count()` в
+    `tools/check_consistency.py`: строка таблицы 6.1 с разобранной вилкой
+    часов считается оценкой, пометка стоит в четвёртой колонке. Экран
+    журнала печатал это число константой и отстал на пять решений
+    («17 из 24» против 22 из 25).
+    """
+    marked = total = 0
+    for cells in _table_rows(_blueprint_text(), "6.1. Часы по модулям и статус оценки"):
+        if len(cells) < 4 or not HOURS_CELL.match(_clean(cells[1])):
+            continue
+        total += 1
+        if CALIBRATION_MARK in cells[3]:
+            marked += 1
+    return {"marked": marked, "total": total}
 
 
 def stage_order() -> list[str]:
@@ -566,6 +644,25 @@ def step_skills(header: dict[str, str]) -> list[str]:
     return list(dict.fromkeys(m.group(1) for m in STEP_SKILL.finditer(head)))
 
 
+def header_skills(header: dict[str, str]) -> list[str]:
+    """ID умений шага или проекта — поле `Умение:` либо `Умения:`.
+
+    Только для показа. В `skill_map()` множественное число намеренно не
+    входит: часть 5 blueprint не приписывает проекту отдельного ID —
+    проект применяет уже закрытые умения, а не закрывает новое, и считать
+    умение незакрытым до сдачи проекта значило бы менять определение
+    закрытости задним числом.
+    """
+    if header.get("Умение"):
+        return step_skills(header)
+    # Проект перечисляет умения через запятую и с пояснением в скобках:
+    # `Умения: A2 (сверка/потеря строк), A5 (…), B2 (…) — часть 5 blueprint…`.
+    # Разбор шага режет по `;` и берёт голову — здесь он вернул бы одно A2.
+    # Хвост после тире отбрасывается: он называет чужие ID.
+    raw = header.get("Умения", "").split("—")[0]
+    return list(dict.fromkeys(m.group(1) for m in STEP_SKILL.finditer(raw)))
+
+
 def skill_map() -> dict[str, list[str]]:
     """ID умения → шаги, которые его объявили."""
     out: dict[str, list[str]] = {}
@@ -627,4 +724,4 @@ def prerequisites(module: str, header: dict[str, str]) -> dict:
 
 def _step_exists(step_id: str) -> bool:
     mod, _, name = step_id.partition("/")
-    return (PROGRAM / mod / f"{name}.md").is_file()
+    return step_path(mod, int(name.replace("step-", ""))) is not None

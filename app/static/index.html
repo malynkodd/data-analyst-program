@@ -4,8 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Analyst Program — прохождение</title>
+<link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/pygments.css">
 <link rel="stylesheet" href="/static/style.css">
+<script>
+  /* Тема ставится до первой отрисовки, иначе тёмное окно моргает белым.
+     Это единственный inline-скрипт страницы и единственное, что
+     приложение хранит в браузере: настройка вида, не содержание
+     программы и не журнал. */
+  try {
+    var t = localStorage.getItem("theme");
+    document.documentElement.dataset.theme =
+      t === "dark" || t === "light" ? t
+      : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  } catch (e) { document.documentElement.dataset.theme = "light"; }
+</script>
 </head>
 <body>
 
@@ -15,27 +28,39 @@
     <span class="sub">от нуля до первой оплачиваемой работы аналитиком</span>
   </div>
   <nav class="topnav">
-    <button data-screen="home" class="active">Программа</button>
-    <button data-screen="skills">Умения</button>
-    <button data-screen="journal">Журнал</button>
+    <button data-screen="home" class="active">
+      <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-home"/></svg>Программа</button>
+    <button data-screen="skills">
+      <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-target"/></svg>Умения</button>
+    <button data-screen="journal">
+      <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-file-text"/></svg>Журнал</button>
   </nav>
   <div class="top-right">
-    <div class="progress" title="закрытых шагов из содержательных">
+    <div class="progress" id="top-progress" title="закрытых содержательных шагов">
+      <span class="pct" id="top-pct">—</span>
       <div class="bar"><i id="top-bar"></i></div>
-      <span id="top-count">…</span>
+      <span class="txt" id="top-count">загрузка…</span>
     </div>
-    <button id="btn-help" class="ghost">Как пользоваться</button>
+    <button id="btn-theme" class="icon-btn" title="светлая или тёмная тема" aria-label="Переключить тему">
+      <svg class="ic" id="theme-dark" aria-hidden="true"><use href="/static/icons.svg#i-moon"/></svg>
+      <svg class="ic" id="theme-light" aria-hidden="true"><use href="/static/icons.svg#i-sun"/></svg>
+    </button>
+    <button id="btn-help" class="icon-btn wide">
+      <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-help"/></svg>Как пользоваться</button>
   </div>
 </header>
 
 <aside id="tree">
   <div class="tree-head">
-    <input id="tree-filter" placeholder="Поиск по шагам…">
+    <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-search"/></svg>
+    <input id="tree-filter" placeholder="Поиск по шагам, модулям, умениям…">
   </div>
-  <div id="tree-body" class="loading">загрузка…</div>
+  <div id="tree-body"></div>
   <p class="legend">
-    <span class="badge">▣</span> есть проверка скриптом &nbsp;
-    <span class="badge">△</span> нужен ручной прогон
+    <span><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-check"/></svg> закрыт</span>
+    <span><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-terminal"/></svg> есть проверка скриптом</span>
+    <span><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-hand"/></svg> нужен ручной прогон</span>
+    <span><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-briefcase"/></svg> проект портфолио</span>
   </p>
 </aside>
 
@@ -44,14 +69,9 @@
   <!-- ЭКРАН ПРИ ЗАПУСКЕ -->
   <section id="home">
     <h1>С чего начать</h1>
-    <p class="lead">
-      Программа — это 73 шага, разложенные по шести этапам. Каждый шаг устроен
-      одинаково: немного теории, разобранный пример, задание, которое вы делаете
-      руками, и проверка — как убедиться, что получилось.
-      Слева — все шаги в том порядке, в котором их надо проходить.
-    </p>
+    <p class="lead" id="home-lead"></p>
 
-    <div id="home-next" class="next-card"></div>
+    <div id="home-hero"></div>
 
     <h2>Как устроен один шаг</h2>
     <ol class="how">
@@ -72,20 +92,23 @@
     <h2>Три вещи, которые стоит знать сразу</h2>
     <div class="cards">
       <div class="card">
-        <h3>Застряли — спросите справа</h3>
+        <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-spark"/></svg>
+          Застряли — спросите справа</h3>
         <p>Ассистент видит текст открытого шага. Каждый вопрос попадёт в журнал
           пометкой <code>[сторона]</code> — это не наказание, а измерение:
           если вопросов на шаг больше одного, значит теории в шаге не хватает
           и её надо дописать.</p>
       </div>
       <div class="card">
-        <h3>Скрипт и ИИ — разные вещи</h3>
-        <p>Зелёная плашка «результат скрипта» означает проверенный факт: файл
-          сошёлся с эталоном. Жёлтая «вердикт ИИ» означает, что ассистент
+        <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-terminal"/></svg>
+          Скрипт и ИИ — разные вещи</h3>
+        <p>Плашка «результат скрипта» означает проверенный факт: файл
+          сошёлся с эталоном. Плашка «вердикт ИИ» означает, что ассистент
           прочитал ваш ответ и сравнил с критерием. Второе слабее первого.</p>
       </div>
       <div class="card">
-        <h3>Часы — честные</h3>
+        <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-clock"/></svg>
+          Часы — честные</h3>
         <p>В шаге написано «6–8 ч» — значит, это и займёт. Пауза
           останавливает таймер: перерывы в счёт не идут.</p>
       </div>
@@ -105,10 +128,15 @@
 
     <div class="action-bar" id="session">
       <div class="left">
-        <button id="btn-start" class="primary">Начал</button>
-        <button id="btn-pause" hidden>Пауза</button>
-        <button id="btn-finish" hidden class="primary">Закончил</button>
-        <button id="btn-reopen" hidden class="ghost">Пройти заново</button>
+        <button id="btn-start" class="primary">
+          <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-play"/></svg>
+          <span id="btn-start-text">Начал</span></button>
+        <button id="btn-pause" hidden>
+          <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-pause"/></svg>Пауза</button>
+        <button id="btn-finish" hidden class="primary">
+          <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-check"/></svg>Закончил</button>
+        <button id="btn-reopen" hidden class="ghost">
+          <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-repeat"/></svg>Пройти заново</button>
       </div>
       <div class="right">
         <span id="timer">0:00:00</span>
@@ -116,9 +144,11 @@
       </div>
     </div>
     <p class="hint" id="session-hint"></p>
+    <div id="session-error"></div>
 
     <div id="finish-form" hidden class="panel">
-      <h3>Закрыть сессию и записать в журнал</h3>
+      <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-file-text"/></svg>
+        Закрыть сессию и записать в журнал</h3>
       <p class="hint">Строка уйдёт в <code>research/self.md</code>. Часы приложение
         не придумывает: план взят из шага, факт — с таймера, вниз до 0.25 ч.</p>
       <div class="grid2">
@@ -137,9 +167,11 @@
         <textarea id="f-useless" rows="2" placeholder="например: повторная генерация датасета, хватило бы одной"></textarea></label>
       <div id="f-notes"></div>
       <div class="row">
-        <button id="btn-write" class="primary">Записать в журнал</button>
+        <button id="btn-write" class="primary">
+          <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-check"/></svg>Записать в журнал</button>
         <button id="btn-cancel" class="ghost">Отмена</button>
       </div>
+      <div id="finish-error"></div>
     </div>
     <pre id="journal-tail" hidden></pre>
     <div id="whats-next" class="next-card" hidden></div>
@@ -157,14 +189,14 @@
     <div id="mod-chips" class="chips"></div>
     <div id="mod-deferred"></div>
     <div id="mod-next" class="next-card"></div>
-    <h2>Шаги модуля</h2>
+    <h2 id="mod-steps-head">Шаги модуля</h2>
     <div id="mod-steps" class="modsteps"></div>
     <h2>Какие умения закрывает</h2>
-    <p class="hint">Формулировки — из части 1 <code>design/blueprint.md</code>:
+    <p class="section-note">Формулировки — из части 1 <code>design/blueprint.md</code>:
       «дано → делает → как проверяется». Ни одного «понимает» и «знает».</p>
     <div id="mod-skills"></div>
     <h2>Справка модуля</h2>
-    <p class="hint">Это <code>step-00.md</code> — файл, который объявляет датасет,
+    <p class="section-note">Это <code>step-00.md</code> — файл, который объявляет датасет,
       схему и предусловие модуля до первого шага. Читать его целиком не обязательно.</p>
     <details id="mod-decl-wrap"><summary>Показать справку</summary>
       <div id="mod-decl" class="md"></div></details>
@@ -173,20 +205,15 @@
   <!-- ЭКРАН УМЕНИЙ -->
   <section id="skills-body" hidden>
     <h1>Карта умений</h1>
-    <p class="lead">36 проверяемых умений — то, ради чего программа существует.
-      Каждое сформулировано как «дано → делает → как проверяется»; умение считается
-      закрытым, когда закрыты все шаги, которые его объявили.</p>
-    <div id="skills-progress" class="next-card"></div>
+    <p class="lead" id="skills-lead"></p>
+    <div id="skills-progress"></div>
     <div id="skills-list"></div>
   </section>
 
   <!-- ЭКРАН ЖУРНАЛА -->
   <section id="journal-body" hidden>
     <h1>Журнал прохождения</h1>
-    <p class="lead">Файл <code>research/self.md</code> — единственное, что приложение
-      пишет. По нему потом чинятся оценки часов всей программы: 17 из 24 вилок в
-      проекте стоят с пометкой «требуется калибровка», и снять её может только замер
-      фактического времени.</p>
+    <p class="lead" id="journal-lead"></p>
     <div id="journal-summary" class="cards"></div>
     <h2>Записи</h2>
     <div id="journal-records"></div>
@@ -194,41 +221,57 @@
 </main>
 
 <aside id="chat">
-  <h3>Ассистент</h3>
+  <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-spark"/></svg>Ассистент</h3>
   <p class="hint" id="chat-hint">Видит текст открытого шага. Спрашивайте то,
-    чего в шаге не хватило.</p>
+    чего в шаге не хватило. Каждый вопрос уйдёт в журнал пометкой
+    <code>[сторона]</code>.</p>
   <div id="chat-suggest"></div>
   <div id="chat-log"></div>
   <div class="chat-input">
     <textarea id="chat-input" rows="3" placeholder="Например: что такое параметр запроса простыми словами?"></textarea>
-    <button id="btn-ask" class="primary">Спросить</button>
+    <div class="row">
+      <span class="kbd">Ctrl+Enter — отправить</span>
+      <button id="btn-ask" class="primary">Спросить</button>
+    </div>
   </div>
 </aside>
 
 <div id="help" class="modal" hidden>
   <div class="modal-box">
-    <button class="close" id="help-close">×</button>
+    <button class="close icon-btn" id="help-close" aria-label="Закрыть">
+      <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-close"/></svg></button>
     <h2>Как пользоваться приложением</h2>
-    <p>Это не курс с видео. Это 73 шага, которые вы делаете руками, и проверки,
+    <p id="help-intro">Это не курс с видео. Это шаги, которые вы делаете руками, и проверки,
       которые говорят «сошлось» или «не сошлось» — без «молодец, продолжай».</p>
-    <h3>Слева — порядок прохождения</h3>
+    <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-flag"/></svg>
+      Слева — порядок прохождения</h3>
     <p>Шаги сгруппированы по шести этапам: «Основание», «Данные в руках»,
       «Показать», «Автоматизировать», «Специализация», «Выход». Идите сверху
       вниз: каждый следующий модуль опирается на предыдущий.
       Серые шаги <i>«Декларация»</i> — служебные, для человека они не нужны,
       их можно пропускать.</p>
-    <h3>В центре — сам шаг</h3>
+    <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-book"/></svg>
+      В центре — сам шаг</h3>
     <p>Разделы пронумерованы одинаково у всех шагов. 1.4 «Задание» и
       1.5 «Критерий готовности» выделены — это то, ради чего шаг существует.
       Кнопки проверки стоят сразу под критерием.</p>
-    <h3>Справа — ассистент</h3>
+    <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-briefcase"/></svg>
+      Шесть проектов — отдельной строкой</h3>
+    <p>У проектов нет шагов: весь проект — один файл <code>project.md</code>
+      с заказчиком, заданием и критериями приёмки. В дереве он стоит внутри
+      своего <b>P</b>-блока и считается отдельно от шагов, потому что шагом не
+      является (часть 6.5 <code>design/blueprint.md</code>).</p>
+    <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-spark"/></svg>
+      Справа — ассистент</h3>
     <p>Отвечает по тексту открытого шага. Если ответа в шаге нет — так и
       скажет, а не придумает.</p>
-    <h3>Что попадает в журнал</h3>
+    <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-file-text"/></svg>
+      Что попадает в журнал</h3>
     <p><code>research/self.md</code> — единственный файл, который приложение
       меняет. Одна строка на сессию: дата, тема, план часов, факт, где застряли,
       что оказалось лишним. По нему потом чинятся оценки часов всей программы.</p>
-    <h3>Если что-то не работает</h3>
+    <h3><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-alert-circle"/></svg>
+      Если что-то не работает</h3>
     <p>Красная надпись вместо ответа ассистента — скорее всего, не заполнен
       <code>app/.env</code> с ключом. Всё остальное — шаги, проверки, таймер,
       журнал — работает и без ключа.</p>

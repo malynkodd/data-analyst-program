@@ -137,7 +137,8 @@ def test_prerequisites_never_point_at_a_missing_file() -> None:
         for st in repo.steps(module):
             for sid in repo.prerequisites(module, st.header)["steps"]:
                 mod, _, name = sid.partition("/")
-                assert (repo.PROGRAM / mod / f"{name}.md").is_file(), f"{st.step_id} → {sid}"
+                number = int(name.replace("step-", ""))
+                assert repo.step_path(mod, number) is not None, f"{st.step_id} → {sid}"
 
 
 def test_review_block_is_read_from_blueprint_like_career() -> None:
@@ -163,3 +164,72 @@ def test_review_point_sections_are_parsed_without_step_numbering() -> None:
     parsed = repo.sections(text)
     assert parsed, "разделы возвратной точки не распарсились"
     assert any("Задания" in body.splitlines()[0] for body in parsed.values())
+
+
+def test_project_brief_is_readable_as_a_step_but_is_not_counted_as_one() -> None:
+    """Шесть проектов написаны одним `project.md`, а не шагами.
+
+    Часть 6.5 blueprint: «у них нет шагов и раздела 1.4, приёмка —
+    acceptance criteria в project.md» (решение 3). До редизайна
+    приложение искало только `step-NN.md`, поэтому P1–P6 показывались
+    строкой «0/0» и весь текст проекта — заказчик, задание, критерии
+    приёмки, 10–30 ч работы каждый — не открывался нигде.
+
+    Файл читается тем же разбором, что шаг: у него та же шапка и те же
+    разделы. Но содержательным шагом он не считается — иначе 90 шагов
+    части 6.5 превратились бы в 96 в одном только интерфейсе.
+    """
+    for code in ("P1", "P2", "P3", "P4", "P5", "P6"):
+        items = repo.steps(code)
+        projects = [s for s in items if s.is_project]
+        assert len(projects) == 1, f"{code}: project.md не прочитан как шаг"
+        project = projects[0]
+        assert project.number == repo.PROJECT_NUMBER
+        assert project.path.name == repo.PROJECT_FILE
+        assert not project.is_declaration
+        assert repo.plan_hours(project.header) != "—", f"{code}: не разобраны часы"
+        assert repo.step(code, repo.PROJECT_NUMBER).step_id == f"{code}/step-01"
+        # Шагов, кроме декларации, у проекта нет — иначе счёт 90 сломан.
+        assert not [s for s in items if not s.is_declaration and not s.is_project]
+
+
+def test_project_lists_its_skills_with_the_plural_field() -> None:
+    """`Умения: A2 (…), A5 (…), B2 (…) — часть 5 blueprint…`.
+
+    Разбор шага режет поле по `;` и берёт голову — на запятых он вернул
+    бы одно A2. В `skill_map()` эти ID намеренно не идут: проект не
+    закрывает новое умение, а применяет уже закрытые (часть 5 blueprint).
+    """
+    assert repo.header_skills(repo.step("P1", 1).header) == ["A2", "A5", "B2"]
+    assert repo.step_skills(repo.step("P1", 1).header) == []
+    mapping = repo.skill_map()
+    assert not [s for ids in mapping.values() for s in ids if s.startswith("P")]
+
+
+def test_lettered_subsection_is_not_read_as_section_one() -> None:
+    """`## 1.2а. Происхождение данных` — вставка, не сдвигающая нумерацию.
+
+    Выражение требовало точку сразу после числа, поэтому «1.2а» ловилось
+    как раздел «1» с названием «2а. Происхождение данных», и оглавление
+    проекта показывало лишний пункт между 1.2 и 1.3.
+    """
+    nums = [s["num"] for s in repo.ordered_sections(repo.step_text("P1", 1))]
+    assert "1.2а" in nums
+    assert "1" not in nums
+    assert nums == sorted(nums, key=lambda n: (len(n), n)) or nums[:2] == ["1.1", "1.2"]
+
+
+def test_hours_and_calibration_come_from_blueprint_not_from_the_interface() -> None:
+    """Итог 6.2 и пометки калибровки 6.1 читаются, а не вписаны в экран.
+
+    Обе величины уже отставали: стартовый экран печатал «43–56 недель при
+    10 ч/нед» против 54–68 в таблице, журнал — «17 из 24 вилок» против
+    22 из 25. Тот же класс ошибки, что ловит `check_calibration_count()`.
+    """
+    totals = repo.totals()
+    assert totals["hours"] and totals["weeks_10"] and totals["weeks_25"]
+    assert "–" in totals["hours"], "итоговые часы разобраны не как вилка"
+
+    cal = repo.calibration()
+    assert cal["total"] == 25, "строк с часовой оценкой в 6.1 не 25"
+    assert 0 < cal["marked"] <= cal["total"]

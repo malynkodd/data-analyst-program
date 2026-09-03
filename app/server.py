@@ -50,9 +50,32 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
+# Подсветка кода — та же зависимость `pygments`, что рендерит шаг. Тем
+# две: светлая и тёмная. Одна на обе делала бы блок кода либо чёрным
+# пятном на белой странице, либо белым на тёмной — то есть единственным
+# местом интерфейса, которое тему не поддерживает.
+PYGMENTS_LIGHT = "friendly"
+PYGMENTS_DARK = "github-dark"
+
+
 @app.get("/pygments.css")
 def pygments_css():
-    css = HtmlFormatter(style="friendly").get_style_defs(".codehilite")
+    light = HtmlFormatter(style=PYGMENTS_LIGHT).get_style_defs(".codehilite")
+    dark_manual = HtmlFormatter(style=PYGMENTS_DARK).get_style_defs(
+        'html[data-theme="dark"] .codehilite'
+    )
+    dark_system = HtmlFormatter(style=PYGMENTS_DARK).get_style_defs(
+        'html:not([data-theme="light"]) .codehilite'
+    )
+    css = "\n".join(
+        [
+            light,
+            "@media (prefers-color-scheme: dark) {",
+            dark_system,
+            "}",
+            dark_manual,
+        ]
+    )
     return app.response_class(css, mimetype="text/css")
 
 
@@ -67,7 +90,7 @@ def _short_title(module: str, number: int, title: str) -> str:
     Номер в заголовках написан и с ведущим нулём (`M4.05`, `P1.00`), и без
     него (`M0.1`, `M3.11`) — снимаются оба вида.
     """
-    for prefix in (f"{module}.{number:02d}.", f"{module}.{number}."):
+    for prefix in (f"{module}.{number:02d}.", f"{module}.{number}.", f"{module}."):
         if title.startswith(prefix):
             return title[len(prefix):].strip()
     return title
@@ -77,10 +100,14 @@ def _module_block(module: str, states: dict) -> dict:
     meta = repo.catalog().get(module, {})
     items = []
     done = 0
+    projects_done = 0
     for st in repo.steps(module):
         status = states.get(st.step_id, {}).get("status", state.NOT_STARTED)
         if status == state.DONE and not st.is_declaration:
-            done += 1
+            if st.is_project:
+                projects_done += 1
+            else:
+                done += 1
         items.append(
             {
                 "step_id": st.step_id,
@@ -89,14 +116,19 @@ def _module_block(module: str, states: dict) -> dict:
                 "title": _short_title(module, st.number, st.title),
                 "full_title": st.title,
                 "declaration": st.is_declaration,
+                "project": st.is_project,
                 "status": status,
                 "plan_hours": repo.plan_hours(st.header),
-                "skill": st.header.get("Умение", ""),
+                "skill": st.header.get("Умение", "") or st.header.get("Умения", ""),
                 "has_checks": bool(repo.check_commands(module, st.path.read_text(encoding="utf-8"))),
                 "deferred": bool(repo.deferred_for(module, st.number)),
             }
         )
-    total = sum(1 for i in items if not i["declaration"])
+    # Проект — работа на 10–30 ч, но содержательным шагом он не считается:
+    # 90 шагов части 6.5 blueprint — это `step-NN.md` (решение 3, «у
+    # проектов нет шагов»). Поэтому два счётчика, а не один раздутый.
+    total = sum(1 for i in items if not i["declaration"] and not i["project"])
+    projects_total = sum(1 for i in items if i["project"])
     return {
         "module": module,
         "name": meta.get("name", ""),
@@ -105,6 +137,8 @@ def _module_block(module: str, states: dict) -> dict:
         "steps": items,
         "done": done,
         "total": total,
+        "projects_done": projects_done,
+        "projects_total": projects_total,
     }
 
 
@@ -131,6 +165,8 @@ def api_tree():
                 "modules": [blocks[c] for c in codes],
                 "done": sum(blocks[c]["done"] for c in codes),
                 "total": sum(blocks[c]["total"] for c in codes),
+                "projects_done": sum(blocks[c]["projects_done"] for c in codes),
+                "projects_total": sum(blocks[c]["projects_total"] for c in codes),
             }
         )
 
@@ -158,6 +194,13 @@ def api_tree():
             "next_step": next_step,
             "done": done,
             "total": total,
+            "projects_done": sum(s["projects_done"] for s in out_stages),
+            "projects_total": sum(s["projects_total"] for s in out_stages),
+            # Часы и недели всей программы, пометки калибровки — из
+            # blueprint, не константой в интерфейсе: обе величины уже
+            # отставали от таблицы на несколько решений.
+            "totals": repo.totals(),
+            "calibration": repo.calibration(),
             "assistant": assistant.available(),
         }
     )
@@ -255,7 +298,10 @@ def api_step(module: str, number: int):
             "module_hours": meta.get("hours", ""),
             "number": number,
             "title": _short_title(module, number, st.title),
-            "code": f"{module}.{number:02d}",
+            # У проекта нет номера шага: файл один, и в журнале строка
+            # должна называться `P1`, а не `P1.01`.
+            "code": module if st.is_project else f"{module}.{number:02d}",
+            "project": st.is_project,
             "rel_path": st.rel_path,
             "header": st.header,
             "header_pairs": repo.header_pairs(st.header),
@@ -298,7 +344,7 @@ def api_module(module: str):
 
     ids: list[str] = []
     for st in repo.steps(module):
-        for sid in repo.step_skills(st.header):
+        for sid in repo.header_skills(st.header):
             if sid not in ids:
                 ids.append(sid)
     by_id = {s["id"]: s for s in repo.skills()}
@@ -316,6 +362,8 @@ def api_module(module: str):
             "steps": block["steps"],
             "done": block["done"],
             "total": block["total"],
+            "projects_done": block["projects_done"],
+            "projects_total": block["projects_total"],
             "skills": [by_id[i] for i in ids if i in by_id],
             "deferred": repo.deferred_for(module),
         }
