@@ -185,6 +185,13 @@ function modRing(done, total) {
             stroke-dashoffset="${off.toFixed(2)}"/></svg>`;
 }
 
+/* Какие модули раскрыты. До этого признак выводился из `current`
+   («раскрыт тот модуль, чей шаг открыт»), и щелчок по модулю сам себя
+   отменял: обработчик показывал список, `openModule()` в конце звал
+   `renderTree()`, тот пересобирал дерево по `current` — то есть по
+   ПРЕДЫДУЩЕМУ шагу — и список схлопывался обратно. */
+const expanded = new Set();
+
 function renderTree() {
   const filter = $("tree-filter").value.trim().toLowerCase();
   const box = $("tree-body");
@@ -219,14 +226,35 @@ function renderTree() {
       const modTotal = mod.total + mod.projects_total;
       const complete = modTotal && modDone === modTotal ? " complete" : "";
       m.innerHTML =
-        `<div class="mod-head${complete}" title="${esc(mod.kind)} · ${esc(mod.hours)} ч">` +
+        `<div class="mod-head${complete}" title="${esc(mod.kind)}, ${esc(mod.hours)} ч">` +
+        `<button class="twist" aria-label="Развернуть или свернуть шаги">${ic("chevron-down")}</button>` +
         modRing(modDone, modTotal) +
         `<span class="code">${esc(mod.module)}</span>` +
         `<span class="name">${esc(mod.name)}</span>` +
         `<span class="count">${modDone}/${modTotal}</span></div>`;
       const list = document.createElement("div");
       list.className = "mod-steps";
-      list.hidden = !filter && !(current && current.module === mod.module);
+
+      // Обработчики вешаются до сборки строк: свёрнутый модуль строк не
+      // имеет, но щёлкаться обязан — иначе раскрыть его нечем.
+      const head = m.querySelector(".mod-head");
+      head.onclick = () => openModule(mod.module);
+      m.querySelector(".twist").onclick = (e) => {
+        e.stopPropagation();          // свернуть, не уходя на экран модуля
+        if (expanded.has(mod.module)) expanded.delete(mod.module);
+        else expanded.add(mod.module);
+        renderTree();
+      };
+      m.appendChild(list);
+      el.appendChild(m);
+
+      // Свёрнутый модуль не строит ни одной строки. Раньше строились все:
+      // ~140 строк по 25 модулям, у каждой до трёх значков `<use>` на
+      // внешний спрайт, и весь этот DOM пересобирался на каждый щелчок —
+      // отсюда заметная задержка на клик по модулю.
+      const open = !!filter || expanded.has(mod.module);
+      head.classList.toggle("open", open);
+      if (!open) continue;
 
       for (const st of steps) {
         const a = document.createElement("div");
@@ -247,12 +275,6 @@ function renderTree() {
         a.onclick = () => openStep(st.module, st.number);
         list.appendChild(a);
       }
-      m.querySelector(".mod-head").onclick = () => {
-        list.hidden = false;
-        openModule(mod.module);
-      };
-      m.appendChild(list);
-      el.appendChild(m);
     }
     box.appendChild(el);
   }
@@ -379,6 +401,10 @@ let currentModule = null;
 
 async function openModule(code) {
   showScreen("module-body");
+  if (!expanded.has(code)) {
+    expanded.add(code);
+    renderTree();
+  }
   $("mod-title").textContent = code;
   $("mod-steps").innerHTML = loadingBox("модуль " + code);
   let m;
@@ -449,7 +475,7 @@ async function openModule(code) {
 
   $("mod-decl").innerHTML = m.declaration_html;
   $("mod-decl-wrap").hidden = !m.has_declaration;
-  renderTree();
+  highlightActive();   // статусы шагов экран модуля не меняет
 }
 
 /* ==================================================================
@@ -571,6 +597,7 @@ async function openJournal() {
 
 async function openStep(module, number) {
   showScreen("step-body");
+  expanded.add(module);
   $("step-title").textContent = `${module}.${pad2(number)}`;
   $("sections").innerHTML = loadingBox("шаг");
   let step;
@@ -951,6 +978,14 @@ function showWhatsNext() {
    АССИСТЕНТ
    ================================================================== */
 
+/** Панель ассистента до того, как открыт шаг: контекста у него нет, и
+    сказать это надо прямо, а не оставлять пустое место. */
+function chatIdle() {
+  $("chat-suggest").innerHTML = "";
+  $("chat-log").innerHTML = emptyBox("Шаг не открыт.",
+    " Ассистент отвечает по тексту открытого шага — выберите шаг слева, и здесь появятся вопросы для начала.");
+}
+
 function renderSuggestions() {
   const q = [
     "Объясни своими словами, что от меня требует этот шаг",
@@ -1019,6 +1054,7 @@ function openHome() {
   current = null;
   showScreen("home");
   highlightActive();
+  chatIdle();
   if (tree) renderTree();
 }
 
@@ -1043,4 +1079,5 @@ try {
 } catch (e) { /* приватное окно — не беда */ }
 
 $("tree-body").innerHTML = loadingBox("дерево программы");
+chatIdle();
 loadTree();

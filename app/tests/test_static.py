@@ -166,3 +166,57 @@ def test_the_two_verdict_plates_stay_distinguishable() -> None:
     assert script_rule != ai_rule, "плашки скрипта и ИИ оформлены одинаково"
     assert "РЕЗУЛЬТАТ СКРИПТА" in JS
     assert "ВЕРДИКТ ИИ ПО КРИТЕРИЮ" in JS
+
+
+def _luminance(hex_colour: str) -> float:
+    channels = [int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast(fg: str, bg: str) -> float:
+    a, b = _luminance(fg), _luminance(bg)
+    return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+
+def _palette(pattern: str) -> dict[str, str]:
+    body = re.search(pattern, CSS, re.S).group(1)
+    return dict(re.findall(r"(--[a-z0-9-]+):\s*(#[0-9a-fA-F]{6});", body))
+
+
+# Пара «что читаем — на чём читаем» и порог WCAG 2.1: 4.5 для текста,
+# 3.0 для подписей мелким кеглем, которые ничего не решают в одиночку.
+CONTRAST_PAIRS = [
+    ("основной текст на странице", "--ink", "--bg", 4.5),
+    ("основной текст на карточке", "--ink", "--bg-raised", 4.5),
+    ("вторичный текст на странице", "--ink-soft", "--bg", 4.5),
+    ("вторичный текст на панели", "--ink-soft", "--bg-soft", 4.5),
+    ("приглушённый текст", "--ink-faint", "--bg-soft", 3.0),
+    ("акцент на странице", "--accent", "--bg", 4.5),
+    ("акцент на своей подложке", "--accent", "--accent-soft", 4.5),
+    ("текст на кнопке-акценте", "--accent-on", "--accent", 4.5),
+    ("«проверено скриптом»", "--ok", "--ok-soft", 4.5),
+    ("«вердикт ИИ»", "--warn", "--warn-soft", 4.5),
+    ("«ручной прогон»", "--danger", "--danger-soft", 4.5),
+    ("вывод терминала", "--term-ink", "--term-bg", 4.5),
+]
+
+
+def test_both_themes_are_readable_by_wcag() -> None:
+    """Контраст текста к фону — счётом, а не «на глаз при дневном свете».
+
+    Тёмная тема правится подбором, и подбор легко уводит подписи в
+    нечитаемое: в тёмной палитре разница между `--ink-soft` и
+    `--ink-faint` на глаз почти незаметна, а в числах это разница между
+    8.4 и 4.6. Порог берётся один раз здесь, а не на каждом правке.
+    """
+    light = _palette(r":root \{(.*?)\n\}")
+    dark = {**light, **_palette(r':root\[data-theme="dark"\] \{(.*?)\n\}')}
+
+    failures = []
+    for theme_name, palette in (("светлая", light), ("тёмная", dark)):
+        for label, fg, bg, need in CONTRAST_PAIRS:
+            got = _contrast(palette[fg], palette[bg])
+            if got < need:
+                failures.append(f"{theme_name}: {label} — {got:.2f}, нужно {need}")
+    assert not failures, "контраст ниже порога:\n" + "\n".join(failures)

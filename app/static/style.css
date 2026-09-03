@@ -87,6 +87,10 @@
   --term-ink: #e8e8e8;
   --term-ok: #86d986;
   --term-fail: #ff9090;
+  /* Светлая подсветка верхней грани карточки: в тёмной теме тень не
+     видна, и объём даёт единственный светлый пиксель сверху. В светлой
+     теме она не нужна — там работает тень. */
+  --edge: rgba(255, 255, 255, 0);
   --overlay: rgba(24, 24, 22, .5);
 }
 
@@ -94,69 +98,71 @@
    выбрал светлую тумблером в шапке. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #16171a;
-    --bg-soft: #1c1e22;
-    --bg-sunk: #101114;
-    --bg-raised: #212429;
-    --line: #2e3238;
-    --line-strong: #454a52;
-    --ink: #e8e8e5;
-    --ink-soft: #a6a9ad;
-    --ink-faint: #7c8087;
-    --accent: #7cb8e0;
-    --accent-hover: #a3cfef;
-    --accent-on: #10202c;
-    --accent-soft: #1b2b38;
-    --accent-line: #2f4a5e;
-    --ok: #6fce8b;
-    --ok-soft: #16261b;
-    --ok-line: #2c4a34;
-    --warn: #e0b662;
-    --warn-soft: #2a2213;
-    --warn-line: #4d3f1d;
-    --danger: #ee8f8f;
-    --danger-soft: #2b1919;
-    --danger-line: #4d2a2a;
-    --term-bg: #0d0e10;
-    --term-ink: #dcdcd8;
-    --overlay: rgba(0, 0, 0, .62);
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
-    --shadow-2: 0 4px 16px rgba(0, 0, 0, .45);
-    --shadow-3: 0 16px 48px rgba(0, 0, 0, .6);
+    --bg: #121418;
+    --bg-soft: #171a1f;
+    --bg-sunk: #0c0e11;
+    --bg-raised: #1c2027;
+    --line: #272c34;
+    --line-strong: #3a414b;
+    --ink: #e6e9ee;
+    --ink-soft: #a8b0ba;
+    --ink-faint: #7b838f;
+    --accent: #79bbe8;
+    --accent-hover: #a6d4f5;
+    --accent-on: #0b1a26;
+    --accent-soft: #16232e;
+    --accent-line: #2c4356;
+    --ok: #74d18d;
+    --ok-soft: #12251a;
+    --ok-line: #27452f;
+    --warn: #e5bc6b;
+    --warn-soft: #26200f;
+    --warn-line: #453a1c;
+    --danger: #f0968f;
+    --danger-soft: #2a1817;
+    --danger-line: #4a2926;
+    --term-bg: #0a0c0e;
+    --term-ink: #dcdfe4;
+    --edge: rgba(255, 255, 255, .045);
+    --overlay: rgba(6, 7, 9, .72);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .5);
+    --shadow-2: 0 6px 20px rgba(0, 0, 0, .55);
+    --shadow-3: 0 20px 56px rgba(0, 0, 0, .7);
   }
 }
 
 /* Тумблер сильнее системы в обе стороны. */
 :root[data-theme="dark"] {
-  --bg: #16171a;
-  --bg-soft: #1c1e22;
-  --bg-sunk: #101114;
-  --bg-raised: #212429;
-  --line: #2e3238;
-  --line-strong: #454a52;
-  --ink: #e8e8e5;
-  --ink-soft: #a6a9ad;
-  --ink-faint: #7c8087;
-  --accent: #7cb8e0;
-  --accent-hover: #a3cfef;
-  --accent-on: #10202c;
-  --accent-soft: #1b2b38;
-  --accent-line: #2f4a5e;
-  --ok: #6fce8b;
-  --ok-soft: #16261b;
-  --ok-line: #2c4a34;
-  --warn: #e0b662;
-  --warn-soft: #2a2213;
-  --warn-line: #4d3f1d;
-  --danger: #ee8f8f;
-  --danger-soft: #2b1919;
-  --danger-line: #4d2a2a;
-  --term-bg: #0d0e10;
-  --term-ink: #dcdcd8;
-  --overlay: rgba(0, 0, 0, .62);
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
-  --shadow-2: 0 4px 16px rgba(0, 0, 0, .45);
-  --shadow-3: 0 16px 48px rgba(0, 0, 0, .6);
+  --bg: #121418;
+  --bg-soft: #171a1f;
+  --bg-sunk: #0c0e11;
+  --bg-raised: #1c2027;
+  --line: #272c34;
+  --line-strong: #3a414b;
+  --ink: #e6e9ee;
+  --ink-soft: #a8b0ba;
+  --ink-faint: #7b838f;
+  --accent: #79bbe8;
+  --accent-hover: #a6d4f5;
+  --accent-on: #0b1a26;
+  --accent-soft: #16232e;
+  --accent-line: #2c4356;
+  --ok: #74d18d;
+  --ok-soft: #12251a;
+  --ok-line: #27452f;
+  --warn: #e5bc6b;
+  --warn-soft: #26200f;
+  --warn-line: #453a1c;
+  --danger: #f0968f;
+  --danger-soft: #2a1817;
+  --danger-line: #4a2926;
+  --term-bg: #0a0c0e;
+  --term-ink: #dcdfe4;
+  --edge: rgba(255, 255, 255, .045);
+  --overlay: rgba(6, 7, 9, .72);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-2: 0 6px 20px rgba(0, 0, 0, .55);
+  --shadow-3: 0 20px 56px rgba(0, 0, 0, .7);
 }
 
 * { box-sizing: border-box; }
@@ -169,7 +175,8 @@
    правило одно и общее. */
 [hidden] { display: none !important; }
 
-html { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 body {
   margin: 0;
@@ -182,6 +189,8 @@ body {
   color: var(--ink);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 ::selection { background: var(--accent-soft); color: var(--ink); }
@@ -239,8 +248,8 @@ body {
 /* Прогресс шапки: процент словами, полоса и вторая величина —
    проекты. Проект не считается шагом (часть 6.5 blueprint), поэтому
    счётчиков два, а не один раздутый. */
-.progress { display: flex; align-items: center; gap: var(--s-2); font-size: var(--t-sm); color: var(--ink-soft); }
-.progress .pct { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.progress { display: flex; align-items: center; gap: var(--s-2); font-size: var(--t-sm); color: var(--ink-faint); }
+.progress .pct { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 .progress .bar {
   width: 116px; height: 7px; background: var(--bg-sunk);
   border: 1px solid var(--line); border-radius: var(--r-pill); overflow: hidden;
@@ -311,9 +320,20 @@ body {
 
 .mod { margin-bottom: 2px; }
 .mod-head {
-  display: flex; align-items: center; gap: var(--s-2); cursor: pointer;
-  padding: 5px 6px; border-radius: var(--r-sm);
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 5px 6px 5px 2px; border-radius: var(--r-sm);
 }
+/* Треугольник сворачивает ветку, не уходя на экран модуля: щелчок по
+   остальной строке открывает модуль и раскрывает её. */
+.twist {
+  flex: none; width: 18px; height: 18px; padding: 0; border: none;
+  background: none; color: var(--ink-faint); border-radius: var(--r-sm);
+  display: flex; align-items: center; justify-content: center;
+}
+.twist .ic { transition: transform .15s ease; transform: rotate(-90deg); }
+.mod-head.open .twist .ic { transform: none; }
+.twist:hover { background: var(--line); color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .twist .ic { transition: none; } }
 .mod-head:hover { background: var(--bg-sunk); }
 .mod-head > .ic { color: var(--ink-faint); }
 .mod-head .code { font-weight: 700; font-size: var(--t-sm); min-width: 30px; }
@@ -385,7 +405,8 @@ h3 { font-size: var(--t-base); margin: 0 0 var(--s-2); }
 .action-bar {
   display: flex; justify-content: space-between; align-items: center;
   gap: var(--s-3); padding: var(--s-3) var(--s-4); border: 1px solid var(--line);
-  border-radius: var(--r-lg); background: var(--bg-raised); box-shadow: var(--shadow-1);
+  border-radius: var(--r-lg); background: var(--bg-raised);
+  box-shadow: var(--shadow-1), inset 0 1px 0 var(--edge);
   position: sticky; top: 0; z-index: 5;
 }
 .action-bar .left, .action-bar .right { display: flex; align-items: center; gap: var(--s-2); }
@@ -415,6 +436,7 @@ h3 { font-size: var(--t-base); margin: 0 0 var(--s-2); }
 .sec {
   border: 1px solid var(--line); border-radius: var(--r-lg);
   margin-bottom: var(--s-3); overflow: hidden; background: var(--bg-raised);
+  box-shadow: inset 0 1px 0 var(--edge);
 }
 .sec.key { border-color: var(--accent-line); box-shadow: var(--shadow-1); }
 .sec-head {
@@ -422,7 +444,8 @@ h3 { font-size: var(--t-base); margin: 0 0 var(--s-2); }
   cursor: pointer; background: var(--bg-soft); user-select: none;
 }
 .sec.key .sec-head { background: var(--accent-soft); }
-.sec-head:hover { filter: brightness(.985); }
+.sec-head:hover { background: var(--bg-sunk); }
+.sec.key .sec-head:hover { background: var(--accent-soft); filter: brightness(1.12); }
 .sec-head .num {
   font-size: var(--t-sm); color: var(--ink-faint); font-weight: 700;
   min-width: 30px; font-variant-numeric: tabular-nums;
@@ -508,7 +531,7 @@ label input, label textarea { margin-top: var(--s-1); color: var(--ink); font-si
 .hero {
   border: 1px solid var(--accent-line); border-radius: var(--r-lg);
   padding: var(--s-5); margin: var(--s-4) 0 var(--s-6);
-  background: var(--accent-soft);
+  background: var(--accent-soft); box-shadow: inset 0 1px 0 var(--edge);
 }
 .hero .label { font-size: var(--t-md); color: var(--ink-soft); margin-bottom: var(--s-2); }
 .hero h2 {
@@ -527,9 +550,12 @@ label input, label textarea { margin-top: var(--s-1); color: var(--ink); font-si
    показывать, иначе она врёт о том, где человек находится. */
 .route { margin-top: var(--s-5); border-top: 1px solid var(--accent-line); padding-top: var(--s-4); }
 .route .track { display: flex; gap: 3px; margin-bottom: 6px; }
-.route .seg { height: 10px; background: var(--bg); border-radius: 2px; overflow: hidden; opacity: .75; }
-.route .seg i { display: block; height: 100%; background: var(--line-strong); }
-.route .seg.current { opacity: 1; outline: 1.5px solid var(--accent); outline-offset: 1px; }
+/* Дорожка сегмента — цветом линии, а не фоном страницы: фон страницы в
+   тёмной теме почти совпадает с фоном карточки героя, и незакрытая часть
+   маршрута пропадала. */
+.route .seg { height: 10px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.route .seg i { display: block; height: 100%; background: var(--ink-faint); }
+.route .seg.current { outline: 1.5px solid var(--accent); outline-offset: 1px; }
 .route .seg.current i { background: var(--accent); }
 .route .sum { font-size: var(--t-sm); color: var(--ink-soft); margin-top: var(--s-3); }
 
@@ -561,6 +587,7 @@ ol.how li { margin-bottom: var(--s-2); }
 .card {
   border: 1px solid var(--line); border-radius: var(--r-lg);
   padding: var(--s-3) var(--s-4); background: var(--bg-soft);
+  box-shadow: inset 0 1px 0 var(--edge);
 }
 .card h3 { font-size: var(--t-md); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
 .card p { font-size: var(--t-md); color: var(--ink-soft); margin: 0; }
@@ -688,7 +715,7 @@ pre.out .fail { color: var(--term-fail); font-weight: 700; }
 .modal-box {
   background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--r-lg);
   padding: var(--s-6); max-width: 680px; max-height: 86vh; overflow-y: auto;
-  position: relative; box-shadow: var(--shadow-3);
+  position: relative; box-shadow: var(--shadow-3), inset 0 1px 0 var(--edge);
 }
 .modal-box h2 { margin-top: 0; font-size: var(--t-xl); }
 .modal-box h3 { font-size: var(--t-md); margin: var(--s-5) 0 var(--s-1); color: var(--accent); display: flex; align-items: center; gap: 6px; }
