@@ -121,9 +121,25 @@ function showScreen(id) {
    `app/state/` не попадает. Значение по умолчанию — системное.
    ================================================================== */
 
+/* Длительность перехода между темами. Держится в одном месте с CSS:
+   `:root[data-switching]` в `style.css` задаёт 420 мс, и число здесь — то
+   же самое плюс запас на кадр. Сверяет `test_theme_switch_timing_agrees`. */
+const THEME_SWITCH_MS = 420;
+let themeSwitchTimer = null;
+
 $("btn-theme").onclick = () => {
-  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
+  const root = document.documentElement;
+  const next = root.dataset.theme === "dark" ? "light" : "dark";
+
+  /* Атрибут ставится в том же такте, что и сама тема: браузер считает
+     стиль один раз и берёт уже длинную длительность. Наведение мышью при
+     этом остаётся быстрым — атрибута на нём нет. */
+  root.dataset.switching = "";
+  root.dataset.theme = next;
+  clearTimeout(themeSwitchTimer);
+  themeSwitchTimer = setTimeout(() => { delete root.dataset.switching; },
+                                THEME_SWITCH_MS + 60);
+
   try { localStorage.setItem("theme", next); } catch (e) { /* приватное окно */ }
 };
 

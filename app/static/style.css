@@ -47,6 +47,17 @@
   --shadow-2: 0 4px 16px rgba(20, 20, 18, .10);
   --shadow-3: 0 16px 48px rgba(20, 20, 18, .22);
 
+  /* Движение. Одна кривая на весь интерфейс и одна длительность: 120 мс —
+     столько, чтобы наведение читалось как отклик, а не как анимация. На
+     время смены темы скрипт ставит на корень `data-switching`, и та же
+     `--dur-theme` становится длинной: перекрашивается вся страница
+     разом, и быстрый переход выглядел бы рывком. Повороты стрелок ниже
+     по файлу пользуются теми же именами, чтобы длительность нигде не
+     была записана числом дважды. */
+  --ease: cubic-bezier(.4, 0, .2, 1);
+  --ease-theme: cubic-bezier(.32, .72, 0, 1);
+  --dur-theme: 120ms;
+
   /* Ширина строки текста шага. 70–75 знаков — не вкус, а порог, за
      которым глаз теряет начало следующей строки. */
   --measure: 72ch;
@@ -58,22 +69,47 @@
   --font: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
 
-  /* Палитра. Светлая — полная, тёмная ниже переопределяет только эти же
-     имена: ни один цвет не объявлен впервые внутри media-запроса. */
+  /* --------------------------------------------------------- палитра
+
+     Светлая объявлена полностью; тёмная ниже переопределяет ровно эти же
+     имена и ни одного нового. Пять поверхностей идут одной лестницей от
+     утопленной к всплывающей — в тёмной теме это и есть глубина, потому
+     что тень на тёмном фоне не видна:
+
+       --bg-sunk    жёлоб: дорожка полосы, блок кода, поле вывода
+       --bg         полотно страницы
+       --bg-soft    панель, приросшая к краю: шапка, дерево, чат
+       --bg-raised  карточка, кнопка, поле ввода — лежит на полотне
+       --bg-float   то, что физически поверх текста: модалка, липкая панель
+
+     Ступени тёмной лестницы разведены по яркости примерно в полтора раза
+     каждая — меньше человек не различит, больше начнёт выглядеть
+     полосатым. Порядок и монотонность проверяет
+     `test_dark_elevation_is_a_monotonic_ladder`. */
   --bg: #ffffff;
   --bg-soft: #f7f7f5;
   --bg-sunk: #f0f0ec;
   --bg-raised: #ffffff;
+  --bg-float: #ffffff;
+
   --line: #e3e3de;
   --line-strong: #c9c9c2;
+  /* Граница того, что нажимают и во что печатают. WCAG 1.4.11 требует
+     3:1 к соседней поверхности, и `--line-strong` этого порога не берёт
+     ни в одной из тем — а до редизайна поля ввода и кнопки упирались
+     именно в него. */
+  --control-line: #89897f;
+
   --ink: #1b1b1a;
   --ink-soft: #5e5e59;
   --ink-faint: #86867f;
+
   --accent: #1f5f8b;
   --accent-hover: #17496b;
   --accent-on: #ffffff;
   --accent-soft: #e8f0f6;
   --accent-line: #bcd4e5;
+
   --ok: #1f7a3a;
   --ok-soft: #e8f5ec;
   --ok-line: #b9dfc6;
@@ -83,89 +119,158 @@
   --danger: #9d2b2b;
   --danger-soft: #fbeded;
   --danger-line: #edc4c4;
+
   --term-bg: #1e1e1e;
   --term-ink: #e8e8e8;
   --term-ok: #86d986;
   --term-fail: #ff9090;
-  /* Светлая подсветка верхней грани карточки: в тёмной теме тень не
-     видна, и объём даёт единственный светлый пиксель сверху. В светлой
-     теме она не нужна — там работает тень. */
+
+  /* Слой состояния. Наведение и нажатие — не отдельный цвет фона, а
+     полупрозрачная плёнка поверх той поверхности, на которой лежит
+     элемент: одно правило работает и на полотне, и на карточке, и в
+     модалке. До редизайна наведение красилось в `--bg-sunk`, и в тёмной
+     теме курсор ЗАТЕМНЯЛ строку — ровно наоборот тому, что обещает
+     лестница поверхностей. Сторожит `test_hover_lifts_never_sinks`. */
+  --hover: rgba(20, 20, 18, .055);
+  --press: rgba(20, 20, 18, .10);
+
+  /* Светлая подсветка верхней грани: в тёмной теме тень не видна, и
+     объём даёт единственный светлый пиксель сверху. `--edge-strong` — то
+     же для верхнего слоя (модалка, липкая панель). В светлой теме обе
+     прозрачны: там работает тень. */
   --edge: rgba(255, 255, 255, 0);
+  --edge-strong: rgba(255, 255, 255, 0);
+
   --overlay: rgba(24, 24, 22, .5);
+  --focus: #1f5f8b;
+  --select-bg: rgba(31, 95, 139, .18);
 }
 
 /* Тёмная тема при системной настройке — кроме случая, когда человек
-   выбрал светлую тумблером в шапке. */
+   выбрал светлую тумблером в шапке. Значения обязаны совпадать с блоком
+   `[data-theme="dark"]` ниже до последней цифры; сторожит
+   `test_the_two_dark_blocks_say_exactly_the_same_thing`. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #121418;
-    --bg-soft: #171a1f;
-    --bg-sunk: #0c0e11;
-    --bg-raised: #1c2027;
-    --line: #272c34;
-    --line-strong: #3a414b;
-    --ink: #e6e9ee;
-    --ink-soft: #a8b0ba;
-    --ink-faint: #7b838f;
-    --accent: #79bbe8;
-    --accent-hover: #a6d4f5;
-    --accent-on: #0b1a26;
-    --accent-soft: #16232e;
-    --accent-line: #2c4356;
-    --ok: #74d18d;
-    --ok-soft: #12251a;
-    --ok-line: #27452f;
-    --warn: #e5bc6b;
-    --warn-soft: #26200f;
-    --warn-line: #453a1c;
-    --danger: #f0968f;
-    --danger-soft: #2a1817;
-    --danger-line: #4a2926;
-    --term-bg: #0a0c0e;
-    --term-ink: #dcdfe4;
-    --edge: rgba(255, 255, 255, .045);
-    --overlay: rgba(6, 7, 9, .72);
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, .5);
-    --shadow-2: 0 6px 20px rgba(0, 0, 0, .55);
-    --shadow-3: 0 20px 56px rgba(0, 0, 0, .7);
+    --bg: #12161b;
+    --bg-soft: #171c22;
+    --bg-sunk: #0d1014;
+    --bg-raised: #1d232b;
+    --bg-float: #252c36;
+    --line: #2a313b;
+    --line-strong: #3e4753;
+    --control-line: #737c89;
+    --ink: #e6eaf0;
+    --ink-soft: #b0b9c5;
+    --ink-faint: #858f9c;
+    --accent: #7fc1ef;
+    --accent-hover: #a9d8fb;
+    --accent-on: #08131c;
+    --accent-soft: #142230;
+    --accent-line: #2f4a63;
+    --ok: #79d494;
+    --ok-soft: #10241a;
+    --ok-line: #26472f;
+    --warn: #e8c076;
+    --warn-soft: #251f10;
+    --warn-line: #453a1e;
+    --danger: #f2998f;
+    --danger-soft: #2a1918;
+    --danger-line: #4b2a27;
+    --term-bg: #0b0e12;
+    --term-ink: #dde1e8;
+    --hover: rgba(174, 205, 240, .075);
+    --press: rgba(174, 205, 240, .13);
+    --edge: rgba(255, 255, 255, .05);
+    --edge-strong: rgba(255, 255, 255, .08);
+    --overlay: rgba(5, 7, 10, .74);
+    --focus: #7fc1ef;
+    --select-bg: rgba(127, 193, 239, .3);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .45);
+    --shadow-2: 0 6px 20px rgba(0, 0, 0, .5);
+    --shadow-3: 0 20px 56px rgba(0, 0, 0, .66);
   }
 }
 
 /* Тумблер сильнее системы в обе стороны. */
 :root[data-theme="dark"] {
-  --bg: #121418;
-  --bg-soft: #171a1f;
-  --bg-sunk: #0c0e11;
-  --bg-raised: #1c2027;
-  --line: #272c34;
-  --line-strong: #3a414b;
-  --ink: #e6e9ee;
-  --ink-soft: #a8b0ba;
-  --ink-faint: #7b838f;
-  --accent: #79bbe8;
-  --accent-hover: #a6d4f5;
-  --accent-on: #0b1a26;
-  --accent-soft: #16232e;
-  --accent-line: #2c4356;
-  --ok: #74d18d;
-  --ok-soft: #12251a;
-  --ok-line: #27452f;
-  --warn: #e5bc6b;
-  --warn-soft: #26200f;
-  --warn-line: #453a1c;
-  --danger: #f0968f;
-  --danger-soft: #2a1817;
-  --danger-line: #4a2926;
-  --term-bg: #0a0c0e;
-  --term-ink: #dcdfe4;
-  --edge: rgba(255, 255, 255, .045);
-  --overlay: rgba(6, 7, 9, .72);
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, .5);
-  --shadow-2: 0 6px 20px rgba(0, 0, 0, .55);
-  --shadow-3: 0 20px 56px rgba(0, 0, 0, .7);
+  --bg: #12161b;
+  --bg-soft: #171c22;
+  --bg-sunk: #0d1014;
+  --bg-raised: #1d232b;
+  --bg-float: #252c36;
+  --line: #2a313b;
+  --line-strong: #3e4753;
+  --control-line: #737c89;
+  --ink: #e6eaf0;
+  --ink-soft: #b0b9c5;
+  --ink-faint: #858f9c;
+  --accent: #7fc1ef;
+  --accent-hover: #a9d8fb;
+  --accent-on: #08131c;
+  --accent-soft: #142230;
+  --accent-line: #2f4a63;
+  --ok: #79d494;
+  --ok-soft: #10241a;
+  --ok-line: #26472f;
+  --warn: #e8c076;
+  --warn-soft: #251f10;
+  --warn-line: #453a1e;
+  --danger: #f2998f;
+  --danger-soft: #2a1918;
+  --danger-line: #4b2a27;
+  --term-bg: #0b0e12;
+  --term-ink: #dde1e8;
+  --hover: rgba(174, 205, 240, .075);
+  --press: rgba(174, 205, 240, .13);
+  --edge: rgba(255, 255, 255, .05);
+  --edge-strong: rgba(255, 255, 255, .08);
+  --overlay: rgba(5, 7, 10, .74);
+  --focus: #7fc1ef;
+  --select-bg: rgba(127, 193, 239, .3);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .45);
+  --shadow-2: 0 6px 20px rgba(0, 0, 0, .5);
+  --shadow-3: 0 20px 56px rgba(0, 0, 0, .66);
+}
+
+/* Пока идёт смена темы, переходы становятся длинными и мягкими. Атрибут
+   ставит и снимает `app.js` — ровно на время перехода, поэтому наведение
+   мышью остаётся быстрым. */
+:root[data-switching] {
+  --dur-theme: 420ms;
+  --ease: var(--ease-theme);
 }
 
 * { box-sizing: border-box; }
+
+/* Переход цвета — общим правилом, а не на каждом компоненте: тема меняет
+   фон, текст, границу и обводку у всего сразу, и список исключений
+   разошёлся бы с разметкой в первый же день. Свойства перечислены
+   поимённо: `transition: all` анимировал бы и раскладку. */
+@media (prefers-reduced-motion: no-preference) {
+  *, *::before, *::after {
+    transition:
+      background-color var(--dur-theme) var(--ease),
+      border-color var(--dur-theme) var(--ease),
+      color var(--dur-theme) var(--ease),
+      fill var(--dur-theme) var(--ease),
+      stroke var(--dur-theme) var(--ease),
+      box-shadow var(--dur-theme) var(--ease),
+      outline-color var(--dur-theme) var(--ease);
+  }
+}
+
+/* Первый кадр — без переходов. Иначе страница, открытая в тёмной теме,
+   на глазах переезжает из светлой: переменные меняют значение в тот
+   момент, когда inline-скрипт проставляет `data-theme`, и общее правило
+   выше честно это анимирует. Атрибут снимается через два кадра там же, в
+   inline-скрипте: снятие не должно зависеть от того, загрузился ли
+   `app.js`. */
+:root[data-boot] *,
+:root[data-boot] *::before,
+:root[data-boot] *::after {
+  transition: none !important;
+}
 
 /* Атрибут `hidden` сильнее любого авторского `display`.
    Без этой строки `.modal { display: flex }` и `.toc { display: flex }`
@@ -193,12 +298,14 @@ body {
   scrollbar-color: var(--line-strong) transparent;
 }
 
-::selection { background: var(--accent-soft); color: var(--ink); }
+/* Выделение — полупрозрачный акцент, а не сплошная плашка: `--accent-soft`
+   в тёмной теме почти неотличим от фона, и выделенный текст выглядел
+   невыделенным. */
+::selection { background: var(--select-bg); color: var(--ink); }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: var(--r-sm);
 }
 
 /* -------------------------------------------------------- значки svg */
@@ -240,7 +347,8 @@ body {
   padding: var(--s-2) var(--s-3); border-radius: var(--r-md);
   font-size: var(--t-md); display: flex; align-items: center; gap: 6px;
 }
-.topnav button:hover { background: var(--bg-sunk); color: var(--ink); }
+.topnav button:hover { background: var(--hover); color: var(--ink); }
+.topnav button:active { background: var(--press); }
 .topnav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 .top-right { display: flex; align-items: center; gap: var(--s-3); margin-left: auto; }
@@ -254,7 +362,8 @@ body {
   width: 116px; height: 7px; background: var(--bg-sunk);
   border: 1px solid var(--line); border-radius: var(--r-pill); overflow: hidden;
 }
-.progress .bar i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .3s ease; }
+.progress .bar i { display: block; height: 100%; width: 0; background: var(--ok);
+  transition: width .3s ease, background-color var(--dur-theme) var(--ease); }
 .progress .txt { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .icon-btn {
@@ -263,7 +372,8 @@ body {
   border: 1px solid var(--line); border-radius: var(--r-md);
   background: var(--bg-raised); color: var(--ink-soft); cursor: pointer;
 }
-.icon-btn:hover { background: var(--bg-sunk); color: var(--ink); }
+.icon-btn:hover { background: var(--hover); color: var(--ink); border-color: var(--line-strong); }
+.icon-btn:active { background: var(--press); }
 .icon-btn.wide { width: auto; padding: 0 var(--s-3); font-size: var(--t-md); }
 
 /* Значок темы: показан тот, на который переключит нажатие. Скрипт при
@@ -308,7 +418,11 @@ body {
 
 /* Текущий этап — тот, где стоит «продолжить здесь». Отличается рамкой и
    подписью, а не только цветом: цвет один на четыре состояния уже был. */
-.stage.current { background: var(--bg); border: 1px solid var(--accent-line); border-radius: var(--r-md); padding: var(--s-2) 0 var(--s-1); }
+/* Подложка — `--bg-raised`, а не `--bg`. Дерево лежит на `--bg-soft`, и
+   полотно страницы светлее панели только в светлой теме: в тёмной
+   текущий этап — единственное, что человек ищет глазами, — оказывался
+   утопленным ниже соседних. Та же ошибка, что была у наведения. */
+.stage.current { background: var(--bg-raised); border: 1px solid var(--accent-line); border-radius: var(--r-md); padding: var(--s-2) 0 var(--s-1); }
 .stage.current .stage-head { color: var(--accent); }
 .stage.current .stage-head .n, .stage.current .stage-head .nm { color: var(--accent); }
 .stage.current .stage-meter i { background: var(--accent); }
@@ -330,11 +444,11 @@ body {
   background: none; color: var(--ink-faint); border-radius: var(--r-sm);
   display: flex; align-items: center; justify-content: center;
 }
-.twist .ic { transition: transform .15s ease; transform: rotate(-90deg); }
+.twist .ic { transition: transform .15s ease, color var(--dur-theme) var(--ease); transform: rotate(-90deg); }
 .mod-head.open .twist .ic { transform: none; }
-.twist:hover { background: var(--line); color: var(--ink); }
+.twist:hover { background: var(--hover); color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { .twist .ic { transition: none; } }
-.mod-head:hover { background: var(--bg-sunk); }
+.mod-head:hover { background: var(--hover); }
 .mod-head > .ic { color: var(--ink-faint); }
 .mod-head .code { font-weight: 700; font-size: var(--t-sm); min-width: 30px; }
 .mod-head .name {
@@ -353,7 +467,7 @@ body {
   display: flex; gap: 7px; align-items: center; padding: 4px 6px;
   border-radius: var(--r-sm); cursor: pointer; font-size: var(--t-md); color: var(--ink-soft);
 }
-.step-link:hover { background: var(--bg-sunk); color: var(--ink); }
+.step-link:hover { background: var(--hover); color: var(--ink); }
 .step-link.active { background: var(--accent-soft); color: var(--ink); box-shadow: inset 2px 0 0 var(--accent); }
 .step-link .num { color: var(--ink-faint); font-size: var(--t-xs); font-variant-numeric: tabular-nums; min-width: 16px; }
 .step-link .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -405,8 +519,8 @@ h3 { font-size: var(--t-base); margin: 0 0 var(--s-2); }
 .action-bar {
   display: flex; justify-content: space-between; align-items: center;
   gap: var(--s-3); padding: var(--s-3) var(--s-4); border: 1px solid var(--line);
-  border-radius: var(--r-lg); background: var(--bg-raised);
-  box-shadow: var(--shadow-1), inset 0 1px 0 var(--edge);
+  border-radius: var(--r-lg); background: var(--bg-float);
+  box-shadow: var(--shadow-2), inset 0 1px 0 var(--edge-strong);
   position: sticky; top: 0; z-index: 5;
 }
 .action-bar .left, .action-bar .right { display: flex; align-items: center; gap: var(--s-2); }
@@ -429,7 +543,7 @@ h3 { font-size: var(--t-base); margin: 0 0 var(--s-2); }
   border: 1px solid var(--line); border-radius: var(--r-pill);
   padding: 3px 11px; background: var(--bg-raised);
 }
-.toc a:hover { background: var(--accent-soft); color: var(--accent); }
+.toc a:hover { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
 .toc a.key { border-color: var(--accent-line); color: var(--accent); font-weight: 600; }
 
 /* секции шага */
@@ -444,8 +558,12 @@ h3 { font-size: var(--t-base); margin: 0 0 var(--s-2); }
   cursor: pointer; background: var(--bg-soft); user-select: none;
 }
 .sec.key .sec-head { background: var(--accent-soft); }
-.sec-head:hover { background: var(--bg-sunk); }
-.sec.key .sec-head:hover { background: var(--accent-soft); filter: brightness(1.12); }
+.sec-head:hover { background: var(--hover); }
+/* Ключевая секция уже покрашена акцентной подложкой, поэтому наведение
+   кладётся плёнкой поверх неё — `filter: brightness()` в тёмной теме
+   почти ничего не даёт: множитель на без малого чёрном фоне остаётся
+   без малого чёрным. */
+.sec.key .sec-head:hover { background: color-mix(in srgb, var(--hover), var(--accent-soft)); }
 .sec-head .num {
   font-size: var(--t-sm); color: var(--ink-faint); font-weight: 700;
   min-width: 30px; font-variant-numeric: tabular-nums;
@@ -453,7 +571,7 @@ h3 { font-size: var(--t-base); margin: 0 0 var(--s-2); }
 .sec.key .sec-head .num { color: var(--accent); }
 .sec-head .ttl { font-weight: 600; font-size: var(--t-base); }
 .sec-head .shint { font-size: var(--t-sm); color: var(--ink-faint); flex: 1; }
-.sec-head .caret { color: var(--ink-faint); transition: transform .18s ease; }
+.sec-head .caret { color: var(--ink-faint); transition: transform .18s ease, color var(--dur-theme) var(--ease); }
 .sec.collapsed .sec-head .caret { transform: rotate(-90deg); }
 .sec-body { padding: var(--s-2) var(--s-5) var(--s-4); }
 .sec.collapsed .sec-body { display: none; }
@@ -468,7 +586,7 @@ h3 { font-size: var(--t-base); margin: 0 0 var(--s-2); }
   border: 1px solid var(--line); border-radius: var(--r-md);
   padding: var(--s-2) var(--s-3); background: var(--bg-raised);
 }
-.step-nav a:hover { border-color: var(--accent-line); color: var(--accent); }
+.step-nav a:hover { border-color: var(--accent-line); background: var(--hover); color: var(--accent); }
 .step-nav a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ------------------------------------------------------ общие блоки */
@@ -485,22 +603,29 @@ h3 { font-size: var(--t-base); margin: 0 0 var(--s-2); }
 .lead { font-size: var(--t-lg); max-width: 64ch; color: var(--ink-soft); line-height: 1.55; }
 
 button {
-  font: inherit; padding: 7px 15px; border: 1px solid var(--line-strong);
+  font: inherit; padding: 7px 15px; border: 1px solid var(--control-line);
   border-radius: var(--r-md); background: var(--bg-raised); color: var(--ink);
   cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
 }
-button:hover { background: var(--bg-sunk); }
+button:hover { background: var(--hover); border-color: var(--line-strong); }
+button:active { background: var(--press); }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); font-weight: 600; }
 button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+button.primary:active { background: var(--accent); border-color: var(--accent); }
 button.ghost { border-color: var(--line); color: var(--ink-soft); }
 button:disabled { opacity: .5; cursor: default; }
 button.big { padding: 10px 20px; font-size: var(--t-base); }
 
 input, textarea, select {
   font: inherit; width: 100%; padding: 7px 10px;
-  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  border: 1px solid var(--control-line); border-radius: var(--r-sm);
   background: var(--bg-raised); color: var(--ink);
 }
+/* Поле, в которое печатают, — единственное место, где рамка сама по себе
+   несёт смысл «сюда можно», поэтому наведение и фокус её усиливают, а не
+   красят фон. */
+input:hover, textarea:hover, select:hover { border-color: var(--ink-faint); }
+input:focus, textarea:focus, select:focus { border-color: var(--focus); }
 input::placeholder, textarea::placeholder { color: var(--ink-faint); }
 textarea { resize: vertical; }
 label { display: block; margin: var(--s-3) 0; font-size: var(--t-sm); color: var(--ink-soft); }
@@ -569,7 +694,7 @@ label input, label textarea { margin-top: var(--s-1); color: var(--ink); font-si
   border: 1px solid var(--line); border-radius: var(--r-sm);
   background: var(--bg-raised); color: var(--ink-faint); font-variant-numeric: tabular-nums;
 }
-.sk-grid a:hover { border-color: var(--accent); color: var(--accent); }
+.sk-grid a:hover { border-color: var(--accent); background: var(--hover); color: var(--accent); }
 .sk-grid a.done { background: var(--ok-soft); border-color: var(--ok-line); color: var(--ok); }
 .sk-grid .gap { width: var(--s-3); }
 
@@ -697,6 +822,7 @@ pre.out .fail { color: var(--term-fail); font-weight: 700; }
   background: var(--bg-sunk); border: 1px solid var(--line); padding: var(--s-3);
   border-radius: var(--r-md); overflow-x: auto; font-size: var(--t-md); line-height: 1.5;
 }
+.md .codehilite { background: transparent; }
 .md code, .md pre { font-family: var(--font-mono); }
 .md code { font-size: var(--t-md); }
 .md :not(pre) > code { background: var(--bg-sunk); border: 1px solid var(--line); padding: 0 5px; border-radius: var(--r-sm); }
@@ -710,12 +836,13 @@ pre.out .fail { color: var(--term-fail); font-weight: 700; }
 
 .modal {
   position: fixed; inset: 0; background: var(--overlay); display: flex;
+  backdrop-filter: blur(3px) saturate(.8);
   align-items: center; justify-content: center; z-index: 50; padding: var(--s-5);
 }
 .modal-box {
-  background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--bg-float); border: 1px solid var(--line-strong); border-radius: var(--r-lg);
   padding: var(--s-6); max-width: 680px; max-height: 86vh; overflow-y: auto;
-  position: relative; box-shadow: var(--shadow-3), inset 0 1px 0 var(--edge);
+  position: relative; box-shadow: var(--shadow-3), inset 0 1px 0 var(--edge-strong);
 }
 .modal-box h2 { margin-top: 0; font-size: var(--t-xl); }
 .modal-box h3 { font-size: var(--t-md); margin: var(--s-5) 0 var(--s-1); color: var(--accent); display: flex; align-items: center; gap: 6px; }
@@ -731,7 +858,7 @@ pre.out .fail { color: var(--term-fail); font-weight: 700; }
   display: flex; gap: var(--s-3); align-items: center; padding: var(--s-3) var(--s-4);
   border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer; background: var(--bg-raised);
 }
-.modstep:hover { border-color: var(--accent-line); background: var(--bg-soft); }
+.modstep:hover { border-color: var(--accent-line); background: var(--hover); }
 .modstep.done { border-color: var(--ok-line); background: var(--ok-soft); }
 .modstep.decl { color: var(--ink-faint); }
 .modstep .n { font-variant-numeric: tabular-nums; color: var(--ink-faint); font-size: var(--t-sm); min-width: 22px; }
@@ -767,7 +894,7 @@ pre.out .fail { color: var(--term-fail); font-weight: 700; }
   border: 1px solid var(--line); border-radius: var(--r-pill);
   padding: 2px 10px; background: var(--bg-raised); cursor: pointer;
 }
-.skill .steps a:hover { border-color: var(--accent-line); color: var(--accent); }
+.skill .steps a:hover { border-color: var(--accent-line); background: var(--hover); color: var(--accent); }
 .skill .steps a.done { border-color: var(--ok-line); color: var(--ok); }
 
 /* ------------------------------------------------------ экран журнала */

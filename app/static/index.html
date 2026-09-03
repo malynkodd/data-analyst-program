@@ -3,23 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Data Analyst Program — прохождение</title>
+<script>
+  /* Единственный inline-скрипт страницы, и он стоит выше таблиц стилей
+     намеренно: тема должна быть на корневом элементе к тому моменту, как
+     браузер начнёт применять CSS. Иначе тёмное окно на долю секунды
+     показывает светлую страницу — то самое мигание, которое пользователь
+     видит на каждой перезагрузке и списывает на «тормозит».
+
+     `data-boot` гасит переходы на первый кадр. Без него мигание не
+     исчезает, а растягивается: страница начинает жизнь со светлой
+     палитрой, скрипт ставит тёмную, и общее правило перехода в
+     `style.css` честно анимирует этот переезд на 120 мс.
+
+     Хранится в браузере ровно одна строка — выбор темы. Это настройка
+     вида, не содержание программы и не журнал: в `app/state/` она не
+     попадает, удаление `app/state/` её не трогает. */
+  (function () {
+    var root = document.documentElement;
+    root.dataset.boot = "";
+    try {
+      var t = localStorage.getItem("theme");
+      root.dataset.theme =
+        t === "dark" || t === "light" ? t
+        : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch (e) { root.dataset.theme = "light"; }
+
+    /* Снятие — здесь же, а не в `app.js`: переходы не должны зависеть от
+       того, загрузился ли основной скрипт. Два кадра, потому что после
+       первого стили ещё не применены; `setTimeout` подстраховывает
+       случай, когда вкладка открыта в фоне и кадров не будет вовсе. */
+    var wake = function () { delete root.dataset.boot; };
+    requestAnimationFrame(function () { requestAnimationFrame(wake); });
+    setTimeout(wake, 300);
+  })();
+</script>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/pygments.css">
 <link rel="stylesheet" href="/static/style.css">
-<script>
-  /* Тема ставится до первой отрисовки, иначе тёмное окно моргает белым.
-     Это единственный inline-скрипт страницы и единственное, что
-     приложение хранит в браузере: настройка вида, не содержание
-     программы и не журнал. */
-  try {
-    var t = localStorage.getItem("theme");
-    document.documentElement.dataset.theme =
-      t === "dark" || t === "light" ? t
-      : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  } catch (e) { document.documentElement.dataset.theme = "light"; }
-</script>
 </head>
 <body>
 
