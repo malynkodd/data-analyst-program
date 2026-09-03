@@ -26,7 +26,7 @@ def test_names_come_from_blueprint_verbatim() -> None:
     catalog = repo.catalog()
     assert catalog["M3"]["name"] == "SQL"
     assert catalog["M4"] == {"name": "Power BI", "hours": "27–36"}
-    assert catalog["M5"]["hours"] == "57–71"  # вилка решения 50, не 80–120
+    assert catalog["M5"]["hours"] == "58–72"  # вилка решения 55, не 80–120
     assert catalog["P1"]["name"] == "Какая точка худшая"
     assert catalog[repo.CAREER]["hours"] == "8–11"  # вилка решения 37
 
@@ -89,9 +89,14 @@ def test_header_fields_do_not_bleed_into_each_other() -> None:
 
 
 def test_repeated_field_is_kept_whole() -> None:
-    """`program/M11/step-04.md` объявляет `Умение: G2` и `Умение: G3`."""
-    header = repo.step("M11", 4).header
-    assert repo.step_skills(header) == ["G2", "G3"]
+    """`program/M13/step-02.md` объявляет `Умение: J1` и `Умение: J2`.
+
+    До решения 54 (2026-08-28) двумя строками объявлялся `M11/step-04.md`
+    (G2 и G3); там они разделены, G3 уехал в `step-05.md`. Файл с двумя
+    строками подряд в программе остался ровно один, и это он.
+    """
+    header = repo.step("M13", 2).header
+    assert repo.step_skills(header) == ["J1", "J2"]
 
 
 def test_every_one_of_46_skills_is_closed_by_a_step() -> None:
@@ -145,7 +150,7 @@ def test_review_block_is_read_from_blueprint_like_career() -> None:
     """
     catalog = repo.catalog()
     assert repo.REVIEW in catalog, "строка «Возвратный контроль» в 6.1 не найдена"
-    assert catalog[repo.REVIEW]["hours"] == "18–23"  # вилка решения 49
+    assert catalog[repo.REVIEW]["hours"] == "29–35"  # вилка решения 54
     assert repo.REVIEW in repo.stage_order(), "блок не попал ни в один этап 6.2"
 
     numbers = [s.number for s in repo.steps(repo.REVIEW) if not s.is_declaration]

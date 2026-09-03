@@ -7,7 +7,9 @@
 в `step-01.md`
 Новые файлы, объявляемые этим шагом: функция `month_gross()` — добавляется
 в `work\metrics.py`; `program\M5\work\chart.py` — строит и проверяет
-график, пишет `work\month_gross.csv` и `work\month_gross.png`
+графики, пишет `work\month_gross.csv`, `work\month_gross.png`,
+`work\amount_hist.png` и `work\gross_fee_scatter.png`;
+`program\M5\work\chart_notes.md` — ваш разбор точечной диаграммы
 Время: 7–9 ч
 
 ## 1.1. Цель и связь с умением
@@ -154,7 +156,7 @@ def check(fig) -> bool:
    не видит: оба ряда действительно читаются, ни один не превратился в
    плоскую линию.
 6. Постройте гистограмму сумм отдельных выплат по обеим выгрузкам
-   (4144 значения), 30 корзин, → `workmount_hist.png`. Подпишите обе
+   (4144 значения), 30 корзин, → `work\amount_hist.png`. Подпишите обе
    оси с единицами. В заголовке или подписи назовите медиану и среднее.
    Форма распределения здесь — часть ответа: если медиана и среднее
    практически совпадают, скоса нет, и об этом стоит написать прямо.
@@ -169,7 +171,7 @@ def check(fig) -> bool:
 9. Коммит:
 
    ```
-   > git add program\M5\work\metrics.py program\M5\work\chart.py program\M5\work\month_gross.csv program\M5\work\month_gross.png program\M5\workmount_hist.png program\M5\work\gross_fee_scatter.png program\M5\work\chart_notes.md
+   > git add program\M5\work\metrics.py program\M5\work\chart.py program\M5\work\month_gross.csv program\M5\work\month_gross.png program\M5\work\amount_hist.png program\M5\work\gross_fee_scatter.png program\M5\work\chart_notes.md
    > git commit -m "M5.08: график оборота и комиссии по месяцам"
    ```
 
@@ -184,7 +186,7 @@ def check(fig) -> bool:
 | число осей в `fig.axes` | 2 | не 1 (единая ось прячет меньший ряд) и не 3+ (лишний подграфик без данных) |
 | поиск `twinx` и `projection="3d"`/`pie(` в `work\chart.py` | 0 попаданий каждого | двойная ось и 3D/«пончик» запрещены явно (1.2) |
 | `work\month_gross.png` | файл существует | размер ≥5 КБ — пустой или бракованный `savefig` даёт файл в разы меньше |
-| `workmount_hist.png` и `work\gross_fee_scatter.png` | оба файла существуют | каждый ≥5 КБ; у обоих подписаны обе оси и указаны единицы |
+| `work\amount_hist.png` и `work\gross_fee_scatter.png` | оба файла существуют | каждый ≥5 КБ; у обоих подписаны обе оси и указаны единицы |
 | гистограмма: медиана и среднее | 42 659.02 и 42 342.83 на 4144 выплатах | расхождение — считаете по одной выгрузке из двух |
 | точечная: корреляция оборота и комиссии | 0.5724 (r² = 0.3277) | до четвёртого знака; другое число — в выборку попали не все 60 партнёров |
 | `work\chart_notes.md` | 2–3 предложения | названо, что точки ложатся на три отдельные прямые по тарифным планам |
@@ -204,6 +206,9 @@ True
 
 **Не сошлось — не переделывайте вслепую:** раздел 1.6 разбирает 2 ошибки
 этого шага, каждую с признаком, по которому её видно в своём результате.
+Своей ошибки среди них нет — идите наружу: поиск и вопрос ИИ
+разрешены (`README.md`, раздел 4), но каждое такое обращение
+пишется пометкой `[сторона] что искал` в `research/self.md`.
 
 ## 1.6. Типичные ошибки
 

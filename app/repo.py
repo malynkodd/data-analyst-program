@@ -409,7 +409,7 @@ def _stages_cached(mtime: float) -> tuple[dict, ...]:
             codes.append(CAREER)
         # Точки R1…R5 названы в 6.2 внутри этапов, а не отдельной строкой:
         # блок один, а стоит он в четырёх этапах из шести.
-        if re.search(r"R\d", cells[1]) and REVIEW not in codes:
+        if re.search(r"\bR\d\b", cells[1]) and REVIEW not in codes:
             codes.append(REVIEW)
         stages.append(
             {

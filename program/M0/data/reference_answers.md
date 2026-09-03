@@ -50,5 +50,5 @@ D0004,2026-07-09,Dnipro,shipped,delivered on time
   непустых строках: `decoded as UTF-8: yes`, `non-empty lines: 3`,
   `contains non-ASCII characters: True`, `OK`, код выхода 0.
 - Тот же текст, сохранённый в кодировке cp1251: `FAIL: file is not valid
-  UTF-8 ('utf-8' codec can't decode byte 0xc4 in position 0: invalid
+  UTF-8 ('utf-8' codec can't decode byte 0xcc in position 0: invalid
   continuation byte)`, код выхода 1.

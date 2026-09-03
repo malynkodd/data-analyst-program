@@ -25,6 +25,7 @@
 | Docker как способ поставить PostgreSQL и что угодно ещё | решение 19, п. 2 (`design/decisions.md`); `program/M3/step-09.md` — установка идёт zip-архивом бинарников |
 | Power BI Desktop не существует на macOS и Linux — альтернативного BI для них нет | `design/blueprint.md`, часть 2.1 (M4) и часть 3.2 (связь M3 → M4 → M15); `design/decisions.md`, решение 21, п. 1 |
 | Версии и пути автора вместо диапазона поддерживаемых версий (Python, PostgreSQL 17.6, Power BI Desktop, локаль, кодировка консоли) | `program/M0/data/reference_answers.md`; `program/M3/data/README.md`; `program/M3/step-09.md` |
+| Excel в M2 назван одной сборкой автора (Microsoft 365 Click-to-Run 16.0.20326.20112, ru-ru), снятой с реестра, а не с экрана самого Excel: приложение агентом не открывалось. Google Sheets объявлен рабочей заменой по составу функций, но ни один шаг M2 в нём не прогнан; диапазон поддерживаемых версий Excel не назван — вместо него дана проверка `=XLOOKUP(` и путь отхода на `ИНДЕКС`+`ПОИСКПОЗ` | `program/M2/step-00.md`, раздел «Инструмент модуля»; `design/decisions.md`, решение 21 и решение 55 |
 | Инструкция на случай, когда `chcp 65001` не помогает (смена шрифта консоли, не-Windows терминалы) | решение 17, п. 3 (`design/decisions.md`); `program/M0/step-01.md`, разд. 1.6 |
 
 ## Домен

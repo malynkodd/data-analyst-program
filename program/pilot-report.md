@@ -1666,7 +1666,7 @@ Power BI — то есть C1 им сдать было нельзя.
 
 Вопрос: P1 говорит, что кодировка зашивается в код запроса, P8 — что она в
 файле проекта не фиксируется. Прогон: прочитан с диска сохранённый проект
-гейта, `D:\m4-gate\pbi\gate.SemanticModel\definition	ables\*.tmdl`.
+гейта, `D:\m4-gate\pbi\gate.SemanticModel\definition\tables\*.tmdl`.
 `Encoding = 65001` стоит у **обеих** таблиц, включая ASCII-файл
 `orders.csv`, — потому что M-код там вписан руками.
 

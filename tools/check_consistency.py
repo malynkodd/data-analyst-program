@@ -675,6 +675,140 @@ PRACTICE_LABEL = {
 }
 
 
+def check_calendar_arithmetic(blueprint_text: str) -> None:
+    """Недели и месяцы частей 6.2 и 6.3 против официального итога 6.1.
+
+    Решение 55 (2026-09-03). До него ни одно из этих чисел скрипт не читал,
+    и аудит глазами студента нашёл в одном разделе 6.3 три разных
+    устаревших итога сразу: недели 51–65 и 21–26 считались от 511–650
+    (редакция двух решений назад), а строка про английский ссылалась на
+    460–588. Студент по этой таблице планирует свой год.
+
+    Правила счёта названы в самой 6.2 и проверяются здесь буквально:
+    недели — деление официального итога (построчная сумма 6.1) на темп с
+    округлением **вверх**; месяцы — деление недель на 4.33 с округлением
+    **вниз**. Отдельно сверяется, что сумма недельных колонок таблицы
+    этапов совпадает с числом, названным прозой рядом: она заведомо больше
+    итоговой строки (каждый этап округлён вверх сам по себе), и именно
+    поэтому её приходится называть отдельно, а не выводить."""
+    part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
+    total_low = total_high = 0
+    for line in part61.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        rng = parse_range(cells[1])
+        if rng is None:
+            continue
+        total_low += rng[0]
+        total_high += rng[1]
+
+    def weeks(hours: int, pace: int) -> int:
+        return -(-hours // pace)
+
+    def months(week_count: int) -> int:
+        return int(week_count / 4.33)
+
+    part62 = section(blueprint_text, "## 6.2.", "## 6.3.")
+    stage_weeks = {10: [0, 0], 25: [0, 0]}
+    total_row: list[str] | None = None
+    stages = 0
+    for line in part62.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 5:
+            continue
+        if cells[0].strip("*").startswith("Итого"):
+            total_row = cells
+            continue
+        hours = parse_range(cells[2])
+        w10 = parse_range(cells[3])
+        w25 = parse_range(cells[4])
+        if not (hours and w10 and w25):
+            continue
+        stages += 1
+        for pace, got in ((10, w10), (25, w25)):
+            want = (weeks(hours[0], pace), weeks(hours[1], pace))
+            if got != want:
+                fail(
+                    f"6.2, этап «{cells[0]}»: недели @{pace} ч/нед "
+                    f"{got[0]}{DASH}{got[1]}, а из {hours[0]}{DASH}{hours[1]} ч "
+                    f"с округлением вверх выходит {want[0]}{DASH}{want[1]}"
+                )
+            stage_weeks[pace][0] += got[0]
+            stage_weeks[pace][1] += got[1]
+
+    if stages == 0 or total_row is None:
+        fail("6.2: таблица этапов не разобрана — нет строк этапов или строки «Итого»")
+        return
+    ok(f"6.2: недели {stages} этапов пересчитаны из их же часов")
+
+    for idx, pace in ((3, 10), (4, 25)):
+        got = parse_range(total_row[idx].strip("*"))
+        want = (weeks(total_low, pace), weeks(total_high, pace))
+        if got != want:
+            fail(
+                f"6.2 Итого: недели @{pace} ч/нед {total_row[idx]}, а из "
+                f"официального итога {total_low}{DASH}{total_high} ч выходит "
+                f"{want[0]}{DASH}{want[1]}"
+            )
+        else:
+            ok(f"6.2 Итого: {want[0]}{DASH}{want[1]} недель @{pace} ч/нед — из итога 6.1")
+
+    m = re.search(rf"их сумма\s*\((\d+){DASH}(\d+) и (\d+){DASH}(\d+)\)", part62)
+    if not m:
+        fail("6.2: не найдена проза «их сумма (N–M и N–M)» о сумме недельных колонок")
+    else:
+        declared = ((int(m.group(1)), int(m.group(2))), (int(m.group(3)), int(m.group(4))))
+        actual = (tuple(stage_weeks[10]), tuple(stage_weeks[25]))
+        if declared != actual:
+            fail(
+                f"6.2: проза называет сумму недельных колонок {declared}, "
+                f"а построчный подсчёт даёт {actual}"
+            )
+        else:
+            ok(f"6.2, проза: сумма недельных колонок {actual} совпадает с подсчётом")
+
+    part63 = section(blueprint_text, "## 6.3.", "## 6.4.")
+    found = 0
+    for pace in (10, 25):
+        m = re.search(
+            rf"\*\*{pace} часов в неделю: (\d+){DASH}(\d+) недель[аи]? "
+            rf"{EM_DASH} это (\d+){DASH}(\d+) месяцев\.\*\*",
+            part63,
+        )
+        if not m:
+            fail(f"6.3: не найдена строка темпа «{pace} часов в неделю»")
+            continue
+        found += 1
+        got_weeks = (int(m.group(1)), int(m.group(2)))
+        got_months = (int(m.group(3)), int(m.group(4)))
+        want_weeks = (weeks(total_low, pace), weeks(total_high, pace))
+        want_months = (months(want_weeks[0]), months(want_weeks[1]))
+        if got_weeks != want_weeks:
+            fail(
+                f"6.3 @{pace} ч/нед: заявлено {got_weeks[0]}{DASH}{got_weeks[1]} недель, "
+                f"а из итога {total_low}{DASH}{total_high} ч выходит "
+                f"{want_weeks[0]}{DASH}{want_weeks[1]}"
+            )
+        elif got_months != want_months:
+            fail(
+                f"6.3 @{pace} ч/нед: заявлено {got_months[0]}{DASH}{got_months[1]} месяцев, "
+                f"а из {want_weeks[0]}{DASH}{want_weeks[1]} недель по 4.33 выходит "
+                f"{want_months[0]}{DASH}{want_months[1]}"
+            )
+        else:
+            ok(
+                f"6.3 @{pace} ч/нед: {got_weeks[0]}{DASH}{got_weeks[1]} недель и "
+                f"{got_months[0]}{DASH}{got_months[1]} месяцев — из итога 6.1"
+            )
+    if found == 2:
+        ok("6.3: обе строки темпа посчитаны от официального итога, а не от прежнего")
+
+
 def check_practice_volume(blueprint_text: str) -> None:
     """Таблица 6.5 «Объём практики» против пересчёта файлов.
 
@@ -1862,6 +1996,59 @@ def strip_code(text: str) -> str:
     return text
 
 
+def check_control_chars() -> None:
+    """Управляющие байты в тексте репозитория.
+
+    Решение 55 (2026-09-03). Найдено не глазами: `grep` печатает такой байт
+    как ничто, и `work\\amount_hist.png` три раза читался в `M5/step-08.md`
+    как `workmount_hist.png`, пока файл не был прочитан программой. Причина
+    у всех четырёх случаев одна — путь с обратным слэшем прошёл через
+    неэкранированную строку при генерации текста, и `\\a`, `\\b`, `\\f`
+    легли на диск как BEL, BS и FF. Один из них был не косметикой:
+    `app/repo.py` искал `\\bR\\d\\b`, а искал на деле BEL-R-цифру-BEL,
+    то есть не находил никогда.
+
+    Табуляция, перевод строки и возврат каретки разрешены; всё остальное из
+    C0 — нет."""
+    allowed = {"\t", "\n", "\r"}
+    # Таб — отдельный случай. В отступе он законен (блоки TMDL в M4 и
+    # research/tools-gate.md скопированы с табами), в середине строки —
+    # тот же съеденный обратный слэш: `work\\transfer_log.md` лежал на
+    # диске как `work` + таб + `ransfer_log.md` в пяти местах.
+    suffixes = {".md", ".py", ".sql", ".csv", ".txt", ".json"}
+    skip = {".git", ".venv", "__pycache__", "node_modules"}
+    found: list[str] = []
+    scanned = 0
+    for path in sorted(ROOT.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in suffixes:
+            continue
+        if any(part in skip for part in path.parts):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        scanned += 1
+        for index, char in enumerate(text):
+            if char < " " and char not in allowed:
+                line = text.count("\n", 0, index) + 1
+                found.append(
+                    f"{path.relative_to(ROOT)}:{line} — байт {hex(ord(char))}"
+                )
+        for number, line_text in enumerate(text.split("\n"), start=1):
+            if "\t" in line_text.lstrip():
+                found.append(
+                    f"{path.relative_to(ROOT)}:{number} — таб в середине строки"
+                )
+    if found:
+        for item in found[:20]:
+            fail(f"управляющий байт в тексте: {item}")
+        if len(found) > 20:
+            fail(f"…и ещё {len(found) - 20} таких же")
+    else:
+        ok(f"управляющих байтов и табов в середине строк нет ни в одном из {scanned} текстовых файлов")
+
+
 def check_forbidden(text_files: list[Path]) -> None:
     """Запрещённые слова и фразы — только по прозе шага (код исключается,
     см. strip_code). POSIX-команды — только внутри блоков кода: решение 13
@@ -1910,6 +2097,7 @@ def main() -> int:
     check_career_hours(blueprint_text)
     check_review_hours(blueprint_text)
     check_part61_prose(blueprint_text)
+    check_calendar_arithmetic(blueprint_text)
     check_practice_volume(blueprint_text)
     check_calibration_count(blueprint_text, claude_text)
     check_skill_ids(blueprint_text)
@@ -1924,6 +2112,7 @@ def main() -> int:
     check_reference_csv_state()
     check_data_dir_no_stray_files()
     check_ui_labels()
+    check_control_chars()
 
     if PROGRAM_DIR.exists():
         step_files = [f for f in PROGRAM_DIR.rglob("*.md") if f.name != "pilot-report.md"]
