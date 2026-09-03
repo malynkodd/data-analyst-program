@@ -54,6 +54,14 @@ SKIP_DIRS = {".venv", "node_modules", "__pycache__", ".git"}
 # ресурса.
 ROBOTS_FORBIDDEN = {"data.gov.ua", "www.data.gov.ua"}
 
+# Локальный адрес — не внешний ресурс, а адрес собственного приложения
+# app/ (решение 40), которым HANDOFF.md/app/README.md объясняют, как его
+# открыть. Fetch снаружи никогда не ответит на 127.0.0.1, вне зависимости
+# от того, жив ли сам app/ — правило 3 CLAUDE.md про мёртвые ссылки-цитаты
+# сюда не относится. Найдено этим ревью 2026-09-03: без исключения адрес
+# ложно считался «новой мёртвой ссылкой».
+LOCAL_HOSTS = {"127.0.0.1", "localhost"}
+
 # Реестр известных мёртвых ссылок (решение 39). Адреса берутся из того же
 # текста, который читает человек, а не из отдельного списка, который
 # разъедется с ним при первой правке.
@@ -133,10 +141,14 @@ def main() -> int:
 
     urls = collect()
     skipped = {u: f for u, f in urls.items() if urlparse(u).netloc in ROBOTS_FORBIDDEN}
-    to_check = {u: f for u, f in urls.items() if u not in skipped}
+    local = {
+        u: f for u, f in urls.items()
+        if u not in skipped and (urlparse(u).hostname or "") in LOCAL_HOSTS
+    }
+    to_check = {u: f for u, f in urls.items() if u not in skipped and u not in local}
 
     print(f"Ссылок в *.md: {len(urls)}; проверяется {len(to_check)}, "
-          f"пропущено по решению 36: {len(skipped)}\n")
+          f"пропущено по решению 36: {len(skipped)}, локальных: {len(local)}\n")
 
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
         results = dict(pool.map(lambda u: probe(u, args.timeout), to_check))
@@ -159,6 +171,8 @@ def main() -> int:
         print(f"[WARN] {results[url]} {url} — закрыт для автоматических запросов")
     for url in sorted(skipped):
         print(f"[SKIP] {url} — robots.txt запрещает агенту (решение 36)")
+    for url in sorted(local):
+        print(f"[SKIP] {url} — локальный адрес app/, не внешний ресурс")
     for url in sorted(u for u in registry if u in alive):
         print(f"[WARN] {url} снова отвечает {results[url]} — строку в "
               f"research/dead-links.md пора убрать")
@@ -166,7 +180,7 @@ def main() -> int:
     print(
         f"\nЖивых: {len(alive)}; закрытых для автозапросов: {len(walled)}; "
         f"известных мёртвых: {len(known)}; новых мёртвых: {len(dead)}; "
-        f"пропущено: {len(skipped)}"
+        f"пропущено: {len(skipped)}; локальных: {len(local)}"
     )
     if dead:
         print(

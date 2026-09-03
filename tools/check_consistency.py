@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import fnmatch
+import os
 import re
 import sqlite3
 import subprocess
@@ -2017,12 +2018,41 @@ def check_control_chars() -> None:
     # диске как `work` + таб + `ransfer_log.md` в пяти местах.
     suffixes = {".md", ".py", ".sql", ".csv", ".txt", ".json"}
     skip = {".git", ".venv", "__pycache__", "node_modules"}
+    # Сгенерированные датасеты (program/M*/data/raw/ и т.п.) покрыты
+    # .gitignore и могут весить сотни МБ (program/M5/data/raw/payouts_big.csv
+    # — 352 МБ, найдено этим же ревью: посимвольный проход по такому файлу
+    # вешает проверку на минуты вместо секунд, а искать управляющие байты в
+    # сгенерированных данных, а не в тексте, который пишут руками, — не
+    # цель проверки). Тот же реестр .gitignore, что использует
+    # check_data_dir_no_stray_files.
+    gitignore_patterns = _load_gitignore_patterns()
+    max_bytes = 2_000_000
     found: list[str] = []
     scanned = 0
-    for path in sorted(ROOT.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in suffixes:
+    skipped_large = 0
+    candidates: list[Path] = []
+    # os.walk с обрезкой skip-каталогов до спуска в них — не
+    # sorted(ROOT.rglob("*")) с фильтром постфактум. На .venv (243 МБ,
+    # ~10 000 файлов, `program/M5/step-01.md`) и .git разница на этом
+    # репозитории — секунды вместо минут, потому что rglob делает stat()
+    # каждому файлу внутри них перед тем, как их отбросить.
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in skip]
+        for name in filenames:
+            path = Path(dirpath) / name
+            if path.suffix.lower() not in suffixes:
+                continue
+            rel = path.relative_to(ROOT)
+            if _matches_gitignore(rel, gitignore_patterns):
+                continue
+            candidates.append(path)
+    for path in sorted(candidates):
+        try:
+            size = path.stat().st_size
+        except OSError:
             continue
-        if any(part in skip for part in path.parts):
+        if size > max_bytes:
+            skipped_large += 1
             continue
         try:
             text = path.read_text(encoding="utf-8")
@@ -2046,7 +2076,8 @@ def check_control_chars() -> None:
         if len(found) > 20:
             fail(f"…и ещё {len(found) - 20} таких же")
     else:
-        ok(f"управляющих байтов и табов в середине строк нет ни в одном из {scanned} текстовых файлов")
+        suffix = f"; пропущено крупных (>{max_bytes // 1_000_000} МБ или .gitignore): {skipped_large}" if skipped_large else ""
+        ok(f"управляющих байтов и табов в середине строк нет ни в одном из {scanned} текстовых файлов{suffix}")
 
 
 def check_forbidden(text_files: list[Path]) -> None:
