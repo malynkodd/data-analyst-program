@@ -25,6 +25,7 @@ if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
 ROOT = Path(__file__).resolve().parent.parent
 BLUEPRINT = ROOT / "design" / "blueprint.md"
 CLAUDE_MD = ROOT / "CLAUDE.md"
+README = ROOT / "README.md"
 DECISIONS = ROOT / "design" / "decisions.md"
 PROGRAM_DIR = ROOT / "program"
 TOOLS_GATE = ROOT / "research" / "tools-gate.md"
@@ -2080,6 +2081,135 @@ def check_control_chars() -> None:
         ok(f"управляющих байтов и табов в середине строк нет ни в одном из {scanned} текстовых файлов{suffix}")
 
 
+def check_readme_student_entry(blueprint_text: str) -> None:
+    """Числа корневого `README.md` против частей 6.1 и 6.2 blueprint.
+
+    Найдено этим аудитом 2026-09-03, и это ровно тот класс, который
+    решение 42 запрещает: число, живущее в прозе, читается скриптом или
+    не пишется вовсе. `README.md` заведён решением 55 как точка входа
+    для студента и повторяет пять величин — официальный итог, обе пары
+    «недель / месяцев», счётчик некалиброванных вилок и шесть вилок
+    этапов таблицы 6.2, — но `check_calendar_arithmetic()` и
+    `check_calibration_count()` читают blueprint и `CLAUDE.md`, а этот
+    файл не читал никто. То есть первый файл, который открывает
+    студент, был единственным местом программы, где часы могли молча
+    разъехаться с blueprint. До заведения этой проверки все пять
+    величин совпадали — она сторожит следующую правку часов, а не чинит
+    сегодняшнее расхождение."""
+    if not README.exists():
+        fail("нет корневого README.md — точки входа студента (решение 55)")
+        return
+    text = README.read_text(encoding="utf-8")
+
+    part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
+    total_low = total_high = 0
+    marked = graded = 0
+    for line in part61.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 4:
+            continue
+        rng = parse_range(cells[1])
+        if rng is None:
+            continue
+        total_low += rng[0]
+        total_high += rng[1]
+        graded += 1
+        if CALIBRATION_MARK in cells[3]:
+            marked += 1
+
+    def weeks(hours: int, pace: int) -> int:
+        return -(-hours // pace)
+
+    m = re.search(rf"\*\*(\d+){DASH}(\d+) ч\*\*", text)
+    if not m:
+        fail("README.md: не найден официальный итог «**N–M ч**»")
+    elif (int(m.group(1)), int(m.group(2))) != (total_low, total_high):
+        fail(
+            f"README.md: итог {m.group(1)}{DASH}{m.group(2)} ч, а построчная "
+            f"сумма 6.1 даёт {total_low}{DASH}{total_high}"
+        )
+    else:
+        ok(f"README.md: итог {total_low}{DASH}{total_high} ч — из построчной суммы 6.1")
+
+    for pace in (25, 10):
+        m = re.search(
+            rf"{pace} ч/нед[^0-9]{{0,12}}(\d+){DASH}(\d+) недел[ьи]"
+            rf"[^0-9]{{0,4}}\((\d+){DASH}(\d+) месяц",
+            text,
+        )
+        if not m:
+            fail(f"README.md: не найдена строка темпа «{pace} ч/нед — N–M недель (N–M месяцев)»")
+            continue
+        got_weeks = (int(m.group(1)), int(m.group(2)))
+        got_months = (int(m.group(3)), int(m.group(4)))
+        want_weeks = (weeks(total_low, pace), weeks(total_high, pace))
+        want_months = (int(want_weeks[0] / 4.33), int(want_weeks[1] / 4.33))
+        if got_weeks != want_weeks or got_months != want_months:
+            fail(
+                f"README.md @{pace} ч/нед: {got_weeks[0]}{DASH}{got_weeks[1]} недель "
+                f"и {got_months[0]}{DASH}{got_months[1]} месяцев, а из итога "
+                f"{total_low}{DASH}{total_high} ч выходит {want_weeks[0]}{DASH}{want_weeks[1]} "
+                f"и {want_months[0]}{DASH}{want_months[1]}"
+            )
+        else:
+            ok(f"README.md @{pace} ч/нед: {want_weeks[0]}{DASH}{want_weeks[1]} недель "
+               f"и {want_months[0]}{DASH}{want_months[1]} месяцев — из итога 6.1")
+
+    # Все вхождения, а не первое: на 2026-09-03 README называет это число
+    # дважды — в разделе 5 («N из M часовых вилок») и в разделе 9 («N из M
+    # вилок»). Проверка первого вхождения пропустила бы расхождение во
+    # втором, а это тот же класс, ради которого она заводится.
+    claims = re.findall(r"(\d+) из (\d+) (?:часовых )?вилок", text)
+    if not claims:
+        fail("README.md: не найдено «N из M вилок ... требуется калибровка»")
+    else:
+        wrong = [c for c in claims if (int(c[0]), int(c[1])) != (marked, graded)]
+        if wrong:
+            fail(
+                f"README.md: {len(wrong)} из {len(claims)} упоминаний калибровки "
+                f"расходятся с таблицей 6.1 ({marked} из {graded}): "
+                + ", ".join(f"«{a} из {b}»" for a, b in wrong)
+            )
+        else:
+            ok(f"README.md: все {len(claims)} упоминаний «{marked} из {graded} вилок "
+               f"требуют калибровки» — из таблицы 6.1")
+
+    part62 = section(blueprint_text, "## 6.2.", "## 6.3.")
+    stage_hours: list[tuple[int, int]] = []
+    for line in part62.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 5 or cells[0].strip("*").startswith("Итого"):
+            continue
+        rng = parse_range(cells[2])
+        if rng and parse_range(cells[3]) and parse_range(cells[4]):
+            stage_hours.append(rng)
+
+    readme_hours: list[tuple[int, int]] = []
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) != 3:
+            continue
+        rng = parse_range(cells[2])
+        if rng and re.match(r"^\d+\.", cells[0].strip("*")):
+            readme_hours.append(rng)
+
+    if not readme_hours:
+        fail("README.md: таблица этапов не разобрана — ни одной строки «N. Название | ... | часы»")
+    elif readme_hours != stage_hours:
+        fail(
+            f"README.md: часы этапов {readme_hours} не совпадают с таблицей 6.2 "
+            f"{stage_hours}"
+        )
+    else:
+        ok(f"README.md: часы {len(readme_hours)} этапов совпадают с таблицей 6.2")
+
+
 def check_forbidden(text_files: list[Path]) -> None:
     """Запрещённые слова и фразы — только по прозе шага (код исключается,
     см. strip_code). POSIX-команды — только внутри блоков кода: решение 13
@@ -2129,6 +2259,7 @@ def main() -> int:
     check_review_hours(blueprint_text)
     check_part61_prose(blueprint_text)
     check_calendar_arithmetic(blueprint_text)
+    check_readme_student_entry(blueprint_text)
     check_practice_volume(blueprint_text)
     check_calibration_count(blueprint_text, claude_text)
     check_skill_ids(blueprint_text)
