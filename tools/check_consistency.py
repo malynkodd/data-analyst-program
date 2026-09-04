@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import fnmatch
+import hashlib
 import os
 import re
 import sqlite3
@@ -2210,6 +2211,78 @@ def check_readme_student_entry(blueprint_text: str) -> None:
         ok(f"README.md: часы {len(readme_hours)} этапов совпадают с таблицей 6.2")
 
 
+def check_snapshot_hashes() -> None:
+    """sha256 снапшотов P3/P4/P6 достижим не только у автора, но и после клона.
+
+    Дефект P3-3 симуляции 2026-09-04: `.gitattributes` с одним правилом
+    `* text=auto` нормализует переводы строк и в снапшотах реальных
+    источников. Часть их содержит перевод строки внутри закавыченного
+    поля csv (название заказчика на две строки) — нормализация не
+    отличает его от разделителя записей, и файл после round-trip через
+    git содержательно другой. Объявленный sha256 не давала ни одна из
+    двух версий: у `program/P3/data/snapshot/tenders_food.csv` рабочая
+    копия давала `71b86062…`, git-объект `c9fc8d54…`, свежий checkout на
+    Windows `ec44cca6…`.
+
+    Проверка сверяет три величины, а не одну: объявленный хэш, хэш файла
+    на диске и хэш **байтов git-объекта**. Третье и есть то, что получит
+    человек после `git clone`, — без него дефект невидим на машине, где
+    файл уже лежит правильный (решение 59).
+    """
+    for project in sorted(PROGRAM_DIR.glob("P*/data/reference_answers.md")):
+        proj = project.parent.parent.name
+        snapshot_dir = project.parent / "snapshot"
+        if not snapshot_dir.is_dir():
+            continue
+        text = project.read_text(encoding="utf-8")
+        declared = {
+            m.group(1): m.group(2)
+            for m in re.finditer(
+                r"([A-Za-z0-9_\-.]+\.(?:csv|txt))[^\n]*?([0-9a-f]{64})", text
+            )
+        }
+        if not declared:
+            fail(f"{proj}: в reference_answers.md нет ни одного sha256 под снапшот")
+            continue
+        checked = 0
+        for name, want in sorted(declared.items()):
+            found = list(snapshot_dir.rglob(name))
+            if not found:
+                fail(f"{proj}/snapshot: объявлен sha256 для {name}, файла нет")
+                continue
+            path = found[0]
+            rel = path.relative_to(ROOT).as_posix()
+            got_disk = hashlib.sha256(path.read_bytes()).hexdigest()
+            if got_disk != want:
+                fail(
+                    f"{rel}: файл на диске даёт sha256 {got_disk[:16]}…, "
+                    f"объявлено {want[:16]}…"
+                )
+                continue
+            blob = subprocess.run(
+                ["git", "cat-file", "-p", f":{rel}"],
+                cwd=ROOT, capture_output=True,
+            )
+            if blob.returncode != 0:
+                warn(f"{rel}: файла нет в индексе git — хэш после клона не проверен")
+                continue
+            got_blob = hashlib.sha256(blob.stdout).hexdigest()
+            if got_blob != want:
+                fail(
+                    f"{rel}: байты git-объекта дают sha256 {got_blob[:16]}…, "
+                    f"объявлено {want[:16]}… — после клона контрольная точка "
+                    f"не сойдётся; файл должен быть помечен `-text` в "
+                    f".gitattributes и переложен `git add --renormalize`"
+                )
+                continue
+            checked += 1
+        if checked:
+            ok(
+                f"{proj}/snapshot: {checked} файлов — объявленный sha256 совпадает "
+                f"и с диском, и с байтами git-объекта (достижим после клона)"
+            )
+
+
 def check_forbidden(text_files: list[Path]) -> None:
     """Запрещённые слова и фразы — только по прозе шага (код исключается,
     см. strip_code). POSIX-команды — только внутри блоков кода: решение 13
@@ -2275,6 +2348,7 @@ def main() -> int:
     check_data_dir_no_stray_files()
     check_ui_labels()
     check_control_chars()
+    check_snapshot_hashes()
 
     if PROGRAM_DIR.exists():
         step_files = [f for f in PROGRAM_DIR.rglob("*.md") if f.name != "pilot-report.md"]
