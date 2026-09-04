@@ -34,10 +34,16 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import sys
 import time
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
+
+# Кириллица в консоли не полагается на кодировку терминала
+# (решение 17; симуляция 2026-09-04, дефект M9-1: без этой строки
+# скрипт падал с UnicodeEncodeError, допечатав часть вывода).
+sys.stdout.reconfigure(encoding="utf-8")
 
 HERE = Path(__file__).resolve().parent
 RAW_ZIP = HERE / "raw" / "uo.zip"

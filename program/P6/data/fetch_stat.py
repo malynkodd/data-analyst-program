@@ -24,9 +24,15 @@ import argparse
 import csv
 import hashlib
 import re
+import sys
 import time
 import urllib.request
 from pathlib import Path
+
+# Кириллица в консоли не полагается на кодировку терминала
+# (решение 17; симуляция 2026-09-04, дефект M9-1: без этой строки
+# скрипт падал с UnicodeEncodeError, допечатав часть вывода).
+sys.stdout.reconfigure(encoding="utf-8")
 
 HEADERS = {"User-Agent": "data-analyst-program research (P6 snapshot)"}
 HERE = Path(__file__).resolve().parent

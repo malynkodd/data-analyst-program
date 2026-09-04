@@ -24,9 +24,15 @@ from __future__ import annotations
 import csv
 import hashlib
 import random
+import sys
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
+
+# Кириллица в консоли не полагается на кодировку терминала
+# (решение 17; симуляция 2026-09-04, дефект M9-1: без этой строки
+# скрипт падал с UnicodeEncodeError, допечатав часть вывода).
+sys.stdout.reconfigure(encoding="utf-8")
 
 SEED = 20260821
 random.seed(SEED)

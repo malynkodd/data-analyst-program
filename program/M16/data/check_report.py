@@ -27,6 +27,11 @@ import re
 import sys
 from pathlib import Path
 
+# Кириллица в консоли не полагается на кодировку терминала
+# (решение 17; симуляция 2026-09-04, дефект M9-1: без этой строки
+# скрипт падал с UnicodeEncodeError, допечатав часть вывода).
+sys.stdout.reconfigure(encoding="utf-8")
+
 LOG = Path(__file__).resolve().parent.parent / "work" / "report_log.md"
 
 URL_RE = re.compile(r"https://lookerstudio\.google\.com/(?:u/\d+/)?reporting/\S+")

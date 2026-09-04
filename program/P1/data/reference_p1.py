@@ -9,8 +9,14 @@
 """
 import csv
 import hashlib
+import sys
 from collections import defaultdict
 from pathlib import Path
+
+# Кириллица в консоли не полагается на кодировку терминала
+# (решение 17; симуляция 2026-09-04, дефект M9-1: без этой строки
+# скрипт падал с UnicodeEncodeError, допечатав часть вывода).
+sys.stdout.reconfigure(encoding="utf-8")
 
 DATA = Path(__file__).resolve().parent / "raw" / "sales_transactions.csv"
 OUT_DIR = Path(__file__).resolve().parent

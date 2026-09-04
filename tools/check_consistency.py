@@ -2211,6 +2211,46 @@ def check_readme_student_entry(blueprint_text: str) -> None:
         ok(f"README.md: часы {len(readme_hours)} этапов совпадают с таблицей 6.2")
 
 
+def check_stdout_encoding() -> None:
+    """Скрипт, печатающий кириллицу, задаёт кодировку вывода сам.
+
+    Решение 17 требует этого прямым текстом, но требование ничем не
+    проверялось, и к 2026-09-04 его не выполняли 33 скрипта из
+    `program/` и `tools/`. Цена — дефект M9-1 симуляции: `traps_c.py`
+    падал с `UnicodeEncodeError`, допечатав 3 ловушки из 10, на консоли
+    не в UTF-8 — то есть ровно в том состоянии, о котором предупреждает
+    `M0/step-01.md`. В том же списке был `M15/data/check_transfer.py`,
+    а это критерий сдачи M15.02.
+    """
+    printing = re.compile(r"print\(.*")
+    offenders = []
+    checked = 0
+    for path in sorted(list(ROOT.glob("program/**/*.py")) + list(ROOT.glob("tools/*.py"))):
+        if "__pycache__" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "print(" not in text:
+            continue
+        if not any(
+            any(ord(ch) > 127 for ch in line) for line in printing.findall(text)
+        ):
+            continue
+        checked += 1
+        if "sys.stdout.reconfigure" not in text:
+            offenders.append(path.relative_to(ROOT).as_posix())
+    if offenders:
+        fail(
+            "печатают кириллицу, но не задают кодировку вывода "
+            f"(решение 17), {len(offenders)} шт.: " + ", ".join(offenders[:8])
+            + (" …" if len(offenders) > 8 else "")
+        )
+    else:
+        ok(
+            f"все {checked} скриптов, печатающих кириллицу, вызывают "
+            f"sys.stdout.reconfigure — падения на консоли не в UTF-8 нет"
+        )
+
+
 def check_snapshot_hashes() -> None:
     """sha256 снапшотов P3/P4/P6 достижим не только у автора, но и после клона.
 
@@ -2349,6 +2389,7 @@ def main() -> int:
     check_ui_labels()
     check_control_chars()
     check_snapshot_hashes()
+    check_stdout_encoding()
 
     if PROGRAM_DIR.exists():
         step_files = [f for f in PROGRAM_DIR.rglob("*.md") if f.name != "pilot-report.md"]

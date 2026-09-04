@@ -9,7 +9,13 @@ SEED фиксирован до первого обращения к random.
 
 import random
 import statistics
+import sys
 from decimal import Decimal
+
+# Кириллица в консоли не полагается на кодировку терминала
+# (решение 17; симуляция 2026-09-04, дефект M9-1: без этой строки
+# скрипт падал с UnicodeEncodeError, допечатав часть вывода).
+sys.stdout.reconfigure(encoding="utf-8")
 
 SEED = 20260823
 random.seed(SEED)

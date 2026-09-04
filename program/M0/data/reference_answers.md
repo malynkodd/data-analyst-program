@@ -25,6 +25,7 @@
 | `find_row.py orders_log.csv --contains "awaiting warehouse"` | **89** |
 | `find_row.py orders_log.csv --contains "payment pending"` | **28** |
 | `find_row.py orders_log.csv --contains Lviv` | **62** |
+| `find_row.py orders_log.csv --contains Odesa` | **67** |
 
 Проверка сумм: 57 + 22 = 79 (= все `cancelled`); 89 + 28 = 117 (= все
 `pending`).

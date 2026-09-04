@@ -9,6 +9,12 @@ WSL. Скрипт печатает то же самое, что дала бы с
 
 import argparse
 import csv
+import sys
+
+# Кириллица в консоли не полагается на кодировку терминала
+# (решение 17; симуляция 2026-09-04, дефект M9-1: без этой строки
+# скрипт падал с UnicodeEncodeError, допечатав часть вывода).
+sys.stdout.reconfigure(encoding="utf-8")
 
 
 def main():

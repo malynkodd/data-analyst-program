@@ -30,8 +30,14 @@
 from __future__ import annotations
 
 import csv
+import sys
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+
+# Кириллица в консоли не полагается на кодировку терминала
+# (решение 17; симуляция 2026-09-04, дефект M9-1: без этой строки
+# скрипт падал с UnicodeEncodeError, допечатав часть вывода).
+sys.stdout.reconfigure(encoding="utf-8")
 
 CUTOFF = date(2026, 8, 1)
 TWO = Decimal("0.01")
