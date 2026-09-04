@@ -20,15 +20,15 @@ SQL | Python (pandas) | Power BI | Excel/Sheets | BigQuery | Git
   выручки — 105 с возвратами, 111 без —
   `program\P1\data\reference_answers.md`
 - Удержание по 12 месячным когортам, SQL: когорта 2025-01 из 180 человек
-  на третий месяц — 0.6056 — `program\P2\data\ref_retention.csv`
-- Дашборд по снапшоту Prozorro, Power BI: 74 тендера категории за период,
+  на третий месяц — 0.6056 — `program\P2\data\reference_answers.md`
+- Дашборд по снапшоту Prozorro, Power BI: 73 тендера категории за период,
   курс НБУ подставлен по дате — `program\P3\data\ref_tenders_period_a.csv`
 - Сведение трёх источников по коду ЄДРПОУ, Python и BigQuery: из 361
   уникального кода найдено 245, не найдено 116 —
-  `program\P4\data\ref_match_report.csv`
+  `program\P4\data\reference_answers.md`
 - Портфель просрочки до и после смены политики, Python: fpd30 0.1009 на
   4230 договорах против 0.0694 на 216 —
-  `program\P5\data\ref_default_comparison.csv`
+  `program\P5\data\reference_answers.md`
 - Пересборка отчёта под изменённый вопрос заказчика, ветка и PR в Git:
   снапшот Держстата, 1050 строк оборота розницы по регионам —
   `program\P6\data\reference_answers.md`

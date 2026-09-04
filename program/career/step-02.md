@@ -90,7 +90,7 @@ legal entities by design. Unexplained losses: 0.
 Что сделал я: сравнил когорты до и после смены политики по fpd30, назвав
 размер каждой группы рядом с долей.
 Результат: 0.1009 на 4230 договорах против 0.0694 на 216 —
-`program\P5\data\ref_default_comparison.csv`
+`program\P5\data\reference_answers.md`
 ```
 
 Размер группы стоит рядом с долей не для полноты: 0.0694 на 216

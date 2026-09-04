@@ -74,7 +74,7 @@ TOOL_FORMS = {
 NUMBER = re.compile(r"\d")
 # Путь к артефакту: program\... или program/... до пробела, запятой или
 # обрамления markdown (обратная кавычка, звёздочка). Без исключения кавычки
-# путь внутри `program\P1\data\ref_by_store.csv` захватывает её в конец и
+# путь внутри `program\P1\data\reference_answers.md` захватывает её в конец и
 # «не находится» при существующем файле.
 PATH_TOKEN = re.compile(r"program[\\/][^\s,;)`*]+")
 CEFR = re.compile(r"\b(A1|A2|B1|B2|C1|C2)\b")
@@ -159,6 +159,7 @@ def check_works(lines: list[str]) -> set[str]:
         ok(f"во всех {len(lines)} строках «Работ» есть число")
 
     checked_paths = 0
+    absent_paths = 0
     for ln in lines:
         paths = PATH_TOKEN.findall(ln)
         if not paths:
@@ -169,8 +170,13 @@ def check_works(lines: list[str]) -> set[str]:
             if (ROOT / rel).exists():
                 checked_paths += 1
             else:
+                absent_paths += 1
                 bad(f"файла нет в репозитории: {raw}")
-    if checked_paths:
+    # Слово «все» обязано означать все. До 2026-09-04 счётчик рос только на
+    # существующих путях, и строка печаталась при любом ненулевом их числе:
+    # три [FAIL] «файла нет» и следом [OK] «все названные артефакты
+    # существуют, проверено путей: 3» (audit/final-audit-2026-09-03.md, F3).
+    if checked_paths and not absent_paths:
         ok(f"все названные артефакты существуют, проверено путей: {checked_paths}")
 
     return {ln.lower() for ln in lines}
