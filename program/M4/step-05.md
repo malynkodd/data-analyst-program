@@ -251,7 +251,7 @@ Total Amount,Settled Amount,Tx Count,Decline Rate,Commission,Settled YTD
 
 | Экспорт | Эталон | Строк | Колонок |
 |---|---|---|---|
-| категории | `ref_next_by_category.csv` | 6 | 5 |
+| категории | `ref_next_by_category.csv` | 6 | 6 |
 | города | `ref_next_by_city.csv` | 9 | 2 |
 | итогов | `ref_next_totals.csv` | 1 | 6 |
 

@@ -22,6 +22,7 @@ Blueprint называет «пропуски в выходные и празд�
 явный повод для П3 объяснить его как есть, а не подогнать текст под
 ожидание.
 """
+import argparse
 import csv
 import hashlib
 import json
@@ -30,8 +31,11 @@ import urllib.request
 from pathlib import Path
 
 HEADERS = {"User-Agent": "data-analyst-program research (P3 snapshot)"}
-OUT_DIR = Path(__file__).resolve().parent / "snapshot"
-OUT_DIR.mkdir(exist_ok=True)
+HERE = Path(__file__).resolve().parent
+# Каталог выгрузки. Значение по умолчанию — не snapshot/: повторная
+# выгрузка не должна затирать файл, с которым её же велено сравнивать
+# (симуляция 2026-09-04, дефект P3-1). Переопределяется --out.
+OUT_DIR = HERE / "refetch"
 
 START = "20200101"
 END = "20260821"
@@ -49,7 +53,27 @@ def fetch(url: str, retries: int = 3):
             time.sleep(2)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=HERE / "refetch",
+        help=(
+            "каталог, куда писать выгрузку. По умолчанию — `refetch/` рядом со `snapshot/`: снапшот проекта повторной выгрузкой не перезаписывается, потому что сравнивать надо с ним, а не вместо него. Чтобы всё-таки переписать снапшот, каталог называется явно: --out snapshot"
+        ),
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    global OUT_DIR
+    OUT_DIR = parse_args().out
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"каталог выгрузки: {OUT_DIR}")
     today = fetch("https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json")
     codes = sorted({row["cc"] for row in today if row.get("cc") and row["cc"] != "UAH"})
     print(f"валют на сегодня: {len(codes)}")

@@ -4,6 +4,7 @@
 относится; сам путь — `program/P3/data/fetch_nbu.py`, найдено прогоном
 2026-08-21): `NBU_Exchange/exchange_site`, не `statdirectory`.
 """
+import argparse
 import csv
 import hashlib
 import json
@@ -13,8 +14,11 @@ from datetime import date
 from pathlib import Path
 
 HEADERS = {"User-Agent": "data-analyst-program research (P6 snapshot)"}
-OUT_DIR = Path(__file__).resolve().parent / "snapshot"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+HERE = Path(__file__).resolve().parent
+# Каталог выгрузки. Значение по умолчанию — не snapshot/: повторная
+# выгрузка не должна затирать файл, с которым её же велено сравнивать
+# (симуляция 2026-09-04, дефект P3-1). Переопределяется --out.
+OUT_DIR = HERE / "refetch"
 
 START = "20150101"
 END = date.today().strftime("%Y%m%d")
@@ -32,7 +36,27 @@ def fetch(url: str, retries: int = 3):
             time.sleep(2)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=HERE / "refetch",
+        help=(
+            "каталог, куда писать выгрузку. По умолчанию — `refetch/` рядом со `snapshot/`: снапшот проекта повторной выгрузкой не перезаписывается, потому что сравнивать надо с ним, а не вместо него. Чтобы всё-таки переписать снапшот, каталог называется явно: --out snapshot"
+        ),
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    global OUT_DIR
+    OUT_DIR = parse_args().out
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"каталог выгрузки: {OUT_DIR}")
     url = (f"https://bank.gov.ua/NBU_Exchange/exchange_site"
            f"?start={START}&end={END}&valcode=usd&sort=exchangedate&json")
     rows = fetch(url)

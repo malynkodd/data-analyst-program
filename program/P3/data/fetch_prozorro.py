@@ -15,6 +15,7 @@
 "15". Останавливается, набрав TARGET подходящих тендеров или пройдя
 MAX_SCAN тендеров ленты, что наступит раньше.
 """
+import argparse
 import csv
 import hashlib
 import json
@@ -24,8 +25,11 @@ from pathlib import Path
 
 BASE = "https://public.api.openprocurement.org/api/2.5/tenders"
 HEADERS = {"User-Agent": "data-analyst-program research (P3 snapshot)"}
-OUT_DIR = Path(__file__).resolve().parent / "snapshot"
-OUT_DIR.mkdir(exist_ok=True)
+HERE = Path(__file__).resolve().parent
+# Каталог выгрузки. Значение по умолчанию — не snapshot/: повторная
+# выгрузка не должна затирать файл, с которым её же велено сравнивать
+# (симуляция 2026-09-04, дефект P3-1). Переопределяется --out.
+OUT_DIR = HERE / "refetch"
 
 TARGET = 600
 MAX_SCAN = 6000
@@ -44,7 +48,27 @@ def fetch(url: str, retries: int = 3):
             time.sleep(2)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=HERE / "refetch",
+        help=(
+            "каталог, куда писать выгрузку. По умолчанию — `refetch/` рядом со `snapshot/`: снапшот проекта повторной выгрузкой не перезаписывается, потому что сравнивать надо с ним, а не вместо него. Чтобы всё-таки переписать снапшот, каталог называется явно: --out snapshot"
+        ),
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    global OUT_DIR
+    OUT_DIR = parse_args().out
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"каталог выгрузки: {OUT_DIR}")
     scanned = 0
     kept = []
     url = f"{BASE}?opt_fields=dateCreated,status&descending=1&limit=100"
