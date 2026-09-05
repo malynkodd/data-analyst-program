@@ -100,15 +100,31 @@ def warn(msg: str) -> None:
     print(f"[WARN] {msg}")
 
 
-def parse_range(text: str) -> tuple[int, int] | None:
-    """'7–9' -> (7, 9); '8' -> (8, 8); нечисловое -> None."""
+# Часы бывают дробными: вилка модуля — построчная сумма шагов, а шаг
+# меряется получасом («Время: 5.5–7.0 ч»). До 2026-09-05 обе величины
+# читались разными парсерами — check_module_hours брал float, а таблицу
+# 6.1 разбирал целочисленный parse_range, — и вилка «35.5–46.5» просто
+# выпадала из суммы, будто строки модуля в таблице нет (решение 59).
+NUM = r"\d+(?:\.\d+)?"
+
+
+def _num(text: str) -> int | float:
+    """'8' -> 8 (int), '5.5' -> 5.5 (float). Целое возвращается целым:
+    иначе недели, посчитанные из часов, печатались бы как «54.0»."""
+    value = float(text)
+    return int(value) if value.is_integer() else value
+
+
+def parse_range(text: str) -> tuple[int | float, int | float] | None:
+    """'7–9' -> (7, 9); '8' -> (8, 8); '35.5–46.5' -> (35.5, 46.5);
+    нечисловое -> None."""
     text = text.strip()
-    m = re.fullmatch(rf"(\d+){DASH}(\d+)", text)
+    m = re.fullmatch(rf"({NUM}){DASH}({NUM})", text)
     if m:
-        return int(m.group(1)), int(m.group(2))
-    m = re.fullmatch(r"\d+", text)
+        return _num(m.group(1)), _num(m.group(2))
+    m = re.fullmatch(NUM, text)
     if m:
-        return int(text), int(text)
+        return _num(text), _num(text)
     return None
 
 
@@ -143,33 +159,37 @@ def check_hours(blueprint_text: str, claude_text: str) -> None:
     if parsed_rows == 0:
         fail("6.1: не удалось распарсить ни одной строки таблицы часов")
         return
-    ok(f"6.1: распарсено {parsed_rows} строк, построчная сумма {total_low}{DASH}{total_high}")
+    ok(f"6.1: распарсено {parsed_rows} строк, построчная сумма "
+       f"{_fmt(total_low)}{DASH}{_fmt(total_high)}")
 
-    m = re.search(rf"Обучение: (\d+){DASH}(\d+) ч", claude_text)
+    m = re.search(rf"Обучение: ({NUM}){DASH}({NUM}) ч", claude_text)
     if not m:
         fail("CLAUDE.md: не найдена строка 'Обучение: N–M ч'")
     else:
-        claude_low, claude_high = int(m.group(1)), int(m.group(2))
+        claude_low, claude_high = _num(m.group(1)), _num(m.group(2))
         if (claude_low, claude_high) == (total_low, total_high):
-            ok(f"CLAUDE.md: {claude_low}{DASH}{claude_high} совпадает с частью 6.1")
+            ok(f"CLAUDE.md: {_fmt(claude_low)}{DASH}{_fmt(claude_high)} "
+               f"совпадает с частью 6.1")
         else:
             fail(
-                f"CLAUDE.md заявляет {claude_low}{DASH}{claude_high}, "
-                f"а часть 6.1 blueprint суммируется в {total_low}{DASH}{total_high}"
+                f"CLAUDE.md заявляет {_fmt(claude_low)}{DASH}{_fmt(claude_high)}, "
+                f"а часть 6.1 blueprint суммируется в "
+                f"{_fmt(total_low)}{DASH}{_fmt(total_high)}"
             )
 
     part62 = section(blueprint_text, "## 6.2.", "## 6.3.")
-    m = re.search(rf"\*\*Итого\*\* \| \| \*\*(\d+){DASH}(\d+)\*\*", part62)
+    m = re.search(rf"\*\*Итого\*\* \| \| \*\*({NUM}){DASH}({NUM})\*\*", part62)
     if not m:
         fail("6.2: не найдена строка 'Итого' в таблице этапов")
     else:
-        it_low, it_high = int(m.group(1)), int(m.group(2))
+        it_low, it_high = _num(m.group(1)), _num(m.group(2))
         if (it_low, it_high) == (total_low, total_high):
-            ok(f"6.2 Итого: {it_low}{DASH}{it_high} совпадает с частью 6.1")
+            ok(f"6.2 Итого: {_fmt(it_low)}{DASH}{_fmt(it_high)} совпадает с частью 6.1")
         else:
             fail(
-                f"6.2 Итого заявляет {it_low}{DASH}{it_high}, "
-                f"а часть 6.1 blueprint суммируется в {total_low}{DASH}{total_high}"
+                f"6.2 Итого заявляет {_fmt(it_low)}{DASH}{_fmt(it_high)}, "
+                f"а часть 6.1 blueprint суммируется в "
+                f"{_fmt(total_low)}{DASH}{_fmt(total_high)}"
             )
 
 
@@ -348,7 +368,7 @@ def check_module_hours(blueprint_text: str) -> None:
         return
 
     part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
-    brackets: dict[str, tuple[int, int]] = {}
+    brackets: dict[str, tuple[int | float, int | float]] = {}
     by_fact: dict[str, str] = {}
     for line in part61.splitlines():
         if not line.startswith("|") or re.match(r"^\|[\s:\-|]+\|?$", line):
@@ -506,27 +526,27 @@ def check_calibration_count(blueprint_text: str, claude_text: str) -> None:
         )
 
 
-PROSE_CORE = re.compile(rf"ядро \(([^)]+)\) = (\d+){DASH}(\d+) ч")
+PROSE_CORE = re.compile(rf"ядро \(([^)]+)\) = ({NUM}){DASH}({NUM}) ч")
 PROSE_REST = re.compile(
-    rf"обвязка\s+\((\d+){DASH}(\d+)\),\s+портфолио\s+\((\d+){DASH}(\d+)\),\s+"
-    rf"сборка артефактов\s+\((\d+){DASH}(\d+)\)\s+"
-    rf"и\s+возвратный\s+контроль\s+\((\d+){DASH}(\d+)\)"
+    rf"обвязка\s+\(({NUM}){DASH}({NUM})\),\s+портфолио\s+\(({NUM}){DASH}({NUM})\),\s+"
+    rf"сборка артефактов\s+\(({NUM}){DASH}({NUM})\)\s+"
+    rf"и\s+возвратный\s+контроль\s+\(({NUM}){DASH}({NUM})\)"
 )
 PROSE_TOTAL_61 = re.compile(
-    rf"Официальный итог программы — сумма этой таблицы, (\d+){DASH}(\d+) ч"
+    rf"Официальный итог программы — сумма этой таблицы, ({NUM}){DASH}({NUM}) ч"
 )
 PROSE_TOTAL_62 = re.compile(
-    rf"Официальный итог — (\d+){DASH}(\d+), построчная сумма части 6\.1"
+    rf"Официальный итог — ({NUM}){DASH}({NUM}), построчная сумма части 6\.1"
 )
 PROSE_STAGE_SUM = re.compile(
-    rf"Построчная сумма шести вилок этапа этой таблицы — (\d+){DASH}(\d+)"
+    rf"Построчная сумма шести вилок этапа этой таблицы — ({NUM}){DASH}({NUM})"
 )
 
 
-def _rows_61(blueprint_text: str) -> list[tuple[str, int, int]]:
+def _rows_61(blueprint_text: str) -> list[tuple[str, int | float, int | float]]:
     """Строки таблицы 6.1 как (подпись, низ, верх). Подпись — первая ячейка."""
     part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
-    out: list[tuple[str, int, int]] = []
+    out: list[tuple[str, int | float, int | float]] = []
     for line in part61.splitlines():
         if not line.startswith("|") or re.match(r"^\|[\s:\-|]+\|?$", line):
             continue
@@ -576,13 +596,15 @@ def check_part61_prose(blueprint_text: str) -> None:
     if missing:
         fail(f"6.1: модули ядра из прозы не найдены в таблице: {', '.join(missing)}")
         return
-    if (int(m.group(2)), int(m.group(3))) != (core_low, core_high):
+    if (_num(m.group(2)), _num(m.group(3))) != (core_low, core_high):
         fail(
             f"6.1, проза: ядро заявлено {m.group(2)}{DASH}{m.group(3)}, "
-            f"а сумма строк {', '.join(core_hit)} даёт {core_low}{DASH}{core_high}"
+            f"а сумма строк {', '.join(core_hit)} даёт "
+            f"{_fmt(core_low)}{DASH}{_fmt(core_high)}"
         )
     else:
-        ok(f"6.1, проза: ядро {core_low}{DASH}{core_high} совпадает с суммой своих строк")
+        ok(f"6.1, проза: ядро {_fmt(core_low)}{DASH}{_fmt(core_high)} "
+           f"совпадает с суммой своих строк")
 
     portfolio = [r for r in rows if re.fullmatch(r"P\d", r[0].split()[0] if r[0].split() else "")]
     career = [r for r in rows if CAREER_ROW_MARK in r[0]]
@@ -601,32 +623,34 @@ def check_part61_prose(blueprint_text: str) -> None:
             "портфолио (N–M), сборка артефактов (N–M) и возвратный контроль (N–M)»"
         )
     else:
-        got = tuple(int(g) for g in m.groups())
+        got = tuple(_num(g) for g in m.groups())
         want = (o_low, o_high, p_low, p_high, c_low, c_high, r_low, r_high)
         if got != want:
-            g = [f"{got[i]}{DASH}{got[i + 1]}" for i in range(0, 8, 2)]
-            w = [f"{want[i]}{DASH}{want[i + 1]}" for i in range(0, 8, 2)]
+            g = [f"{_fmt(got[i])}{DASH}{_fmt(got[i + 1])}" for i in range(0, 8, 2)]
+            w = [f"{_fmt(want[i])}{DASH}{_fmt(want[i + 1])}" for i in range(0, 8, 2)]
             fail(
                 f"6.1, проза: обвязка/портфолио/сборка/возврат заявлены "
                 f"{' / '.join(g)}, а таблица даёт {' / '.join(w)}"
             )
         else:
             ok(
-                f"6.1, проза: обвязка {o_low}{DASH}{o_high}, портфолио {p_low}{DASH}{p_high}, "
-                f"сборка {c_low}{DASH}{c_high}, возвратный контроль {r_low}{DASH}{r_high} "
-                f"— совпадают с таблицей"
+                f"6.1, проза: обвязка {_fmt(o_low)}{DASH}{_fmt(o_high)}, "
+                f"портфолио {_fmt(p_low)}{DASH}{_fmt(p_high)}, "
+                f"сборка {_fmt(c_low)}{DASH}{_fmt(c_high)}, возвратный контроль "
+                f"{_fmt(r_low)}{DASH}{_fmt(r_high)} — совпадают с таблицей"
             )
 
     m = PROSE_TOTAL_61.search(part61)
     if not m:
         fail("6.1, проза: не найдено «Официальный итог программы — сумма этой таблицы, N–M ч»")
-    elif (int(m.group(1)), int(m.group(2))) != (t_low, t_high):
+    elif (_num(m.group(1)), _num(m.group(2))) != (t_low, t_high):
         fail(
             f"6.1, проза: официальный итог заявлен {m.group(1)}{DASH}{m.group(2)}, "
-            f"а построчная сумма таблицы — {t_low}{DASH}{t_high}"
+            f"а построчная сумма таблицы — {_fmt(t_low)}{DASH}{_fmt(t_high)}"
         )
     else:
-        ok(f"6.1, проза: официальный итог {t_low}{DASH}{t_high} совпадает с суммой таблицы")
+        ok(f"6.1, проза: официальный итог {_fmt(t_low)}{DASH}{_fmt(t_high)} "
+           f"совпадает с суммой таблицы")
 
     part62 = section(blueprint_text, "## 6.2.", "## 6.3.")
     stage_low = stage_high = 0
@@ -645,24 +669,26 @@ def check_part61_prose(blueprint_text: str) -> None:
     m = PROSE_STAGE_SUM.search(part62)
     if not m:
         fail("6.2, проза: не найдено «Построчная сумма шести вилок этапа этой таблицы — N–M»")
-    elif (int(m.group(1)), int(m.group(2))) != (stage_low, stage_high):
+    elif (_num(m.group(1)), _num(m.group(2))) != (stage_low, stage_high):
         fail(
             f"6.2, проза: сумма вилок этапов заявлена {m.group(1)}{DASH}{m.group(2)}, "
-            f"а построчный подсчёт даёт {stage_low}{DASH}{stage_high}"
+            f"а построчный подсчёт даёт {_fmt(stage_low)}{DASH}{_fmt(stage_high)}"
         )
     else:
-        ok(f"6.2, проза: сумма вилок этапов {stage_low}{DASH}{stage_high} совпадает с подсчётом")
+        ok(f"6.2, проза: сумма вилок этапов {_fmt(stage_low)}{DASH}{_fmt(stage_high)} "
+           f"совпадает с подсчётом")
 
     m = PROSE_TOTAL_62.search(part62)
     if not m:
         fail("6.2, проза: не найдено «Официальный итог — N–M, построчная сумма части 6.1»")
-    elif (int(m.group(1)), int(m.group(2))) != (t_low, t_high):
+    elif (_num(m.group(1)), _num(m.group(2))) != (t_low, t_high):
         fail(
             f"6.2, проза: официальный итог заявлен {m.group(1)}{DASH}{m.group(2)}, "
-            f"а часть 6.1 суммируется в {t_low}{DASH}{t_high}"
+            f"а часть 6.1 суммируется в {_fmt(t_low)}{DASH}{_fmt(t_high)}"
         )
     else:
-        ok(f"6.2, проза: официальный итог {t_low}{DASH}{t_high} совпадает с частью 6.1")
+        ok(f"6.2, проза: официальный итог {_fmt(t_low)}{DASH}{_fmt(t_high)} "
+           f"совпадает с частью 6.1")
 
 
 PRACTICE_SPLIT = re.compile(
@@ -708,8 +734,8 @@ def check_calendar_arithmetic(blueprint_text: str) -> None:
         total_low += rng[0]
         total_high += rng[1]
 
-    def weeks(hours: int, pace: int) -> int:
-        return -(-hours // pace)
+    def weeks(hours: int | float, pace: int) -> int:
+        return int(-(-hours // pace))
 
     def months(week_count: int) -> int:
         return int(week_count / 4.33)
@@ -738,7 +764,8 @@ def check_calendar_arithmetic(blueprint_text: str) -> None:
             if got != want:
                 fail(
                     f"6.2, этап «{cells[0]}»: недели @{pace} ч/нед "
-                    f"{got[0]}{DASH}{got[1]}, а из {hours[0]}{DASH}{hours[1]} ч "
+                    f"{got[0]}{DASH}{got[1]}, а из "
+                    f"{_fmt(hours[0])}{DASH}{_fmt(hours[1])} ч "
                     f"с округлением вверх выходит {want[0]}{DASH}{want[1]}"
                 )
             stage_weeks[pace][0] += got[0]
@@ -755,7 +782,7 @@ def check_calendar_arithmetic(blueprint_text: str) -> None:
         if got != want:
             fail(
                 f"6.2 Итого: недели @{pace} ч/нед {total_row[idx]}, а из "
-                f"официального итога {total_low}{DASH}{total_high} ч выходит "
+                f"официального итога {_fmt(total_low)}{DASH}{_fmt(total_high)} ч выходит "
                 f"{want[0]}{DASH}{want[1]}"
             )
         else:
@@ -794,7 +821,7 @@ def check_calendar_arithmetic(blueprint_text: str) -> None:
         if got_weeks != want_weeks:
             fail(
                 f"6.3 @{pace} ч/нед: заявлено {got_weeks[0]}{DASH}{got_weeks[1]} недель, "
-                f"а из итога {total_low}{DASH}{total_high} ч выходит "
+                f"а из итога {_fmt(total_low)}{DASH}{_fmt(total_high)} ч выходит "
                 f"{want_weeks[0]}{DASH}{want_weeks[1]}"
             )
         elif got_months != want_months:
@@ -956,7 +983,7 @@ def _check_block_hours(blueprint_text: str, dir_name: str, row_mark: str) -> Non
         return
 
     part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
-    bracket: tuple[int, int] | None = None
+    bracket: tuple[int | float, int | float] | None = None
     mark: str | None = None
     for line in part61.splitlines():
         if not line.startswith("|") or row_mark not in line:
@@ -1004,7 +1031,7 @@ def _check_block_hours(blueprint_text: str, dir_name: str, row_mark: str) -> Non
     b_low, b_high = bracket
     label = (
         f"{dir_name}: сумма {len(pairs)} шагов {_fmt(low)}{DASH}{_fmt(high)} ч "
-        f"при вилке 6.1 {b_low}{DASH}{b_high}"
+        f"при вилке 6.1 {_fmt(b_low)}{DASH}{_fmt(b_high)}"
     )
     if low == b_low and high == b_high and mark:
         warn(
@@ -1031,7 +1058,7 @@ def _check_block_hours(blueprint_text: str, dir_name: str, row_mark: str) -> Non
 
 
 PART2_TOTAL_ROW = re.compile(r"^Итого (ядро|обвязка)$")
-PART2_HEADING_RANGE = re.compile(rf"(\d+){DASH}(\d+) ч")
+PART2_HEADING_RANGE = re.compile(rf"({NUM}){DASH}({NUM}) ч")
 
 
 def check_part2_hours(blueprint_text: str) -> None:
@@ -1045,7 +1072,7 @@ def check_part2_hours(blueprint_text: str) -> None:
     модуля против 6.1, строку «Итого» против построчной суммы своей же
     таблицы и число в заголовке раздела против той же суммы."""
     part61 = section(blueprint_text, "## 6.1.", "## 6.2.")
-    ref: dict[str, tuple[int, int]] = {}
+    ref: dict[str, tuple[int | float, int | float]] = {}
     for line in part61.splitlines():
         if not line.startswith("|"):
             continue
@@ -1065,7 +1092,7 @@ def check_part2_hours(blueprint_text: str) -> None:
         low = high = 0
         rows = 0
         problems = 0
-        declared: tuple[int, int] | None = None
+        declared: tuple[int | float, int | float] | None = None
         for line in text.splitlines():
             if not line.startswith("|"):
                 continue
@@ -1089,8 +1116,9 @@ def check_part2_hours(blueprint_text: str) -> None:
                 problems += 1
             elif expected != rng:
                 fail(
-                    f"часть {name}: {m.group(1)} заявляет {rng[0]}{DASH}{rng[1]} ч, "
-                    f"а часть 6.1 — {expected[0]}{DASH}{expected[1]}"
+                    f"часть {name}: {m.group(1)} заявляет "
+                    f"{_fmt(rng[0])}{DASH}{_fmt(rng[1])} ч, "
+                    f"а часть 6.1 — {_fmt(expected[0])}{DASH}{_fmt(expected[1])}"
                 )
                 problems += 1
             checked += 1
@@ -1103,22 +1131,23 @@ def check_part2_hours(blueprint_text: str) -> None:
             problems += 1
         elif declared != (low, high):
             fail(
-                f"часть {name}: строка «Итого» заявляет {declared[0]}{DASH}{declared[1]}, "
-                f"а построчная сумма таблицы — {low}{DASH}{high}"
+                f"часть {name}: строка «Итого» заявляет "
+                f"{_fmt(declared[0])}{DASH}{_fmt(declared[1])}, "
+                f"а построчная сумма таблицы — {_fmt(low)}{DASH}{_fmt(high)}"
             )
             problems += 1
         m = PART2_HEADING_RANGE.search(heading)
         if not m:
             fail(f"часть {name}: в заголовке раздела нет числа часов вида «N{DASH}M ч»")
             problems += 1
-        elif (int(m.group(1)), int(m.group(2))) != (low, high):
+        elif (_num(m.group(1)), _num(m.group(2))) != (low, high):
             fail(
                 f"часть {name}: заголовок раздела заявляет {m.group(1)}{DASH}{m.group(2)} ч, "
-                f"а построчная сумма таблицы — {low}{DASH}{high}"
+                f"а построчная сумма таблицы — {_fmt(low)}{DASH}{_fmt(high)}"
             )
             problems += 1
         if problems == 0:
-            ok(f"часть {name}: {rows} модулей, сумма {low}{DASH}{high} ч — "
+            ok(f"часть {name}: {rows} модулей, сумма {_fmt(low)}{DASH}{_fmt(high)} ч — "
                f"совпадает с заголовком, строкой «Итого» и вилками части 6.1")
 
     if checked == 0:
@@ -2120,19 +2149,20 @@ def check_readme_student_entry(blueprint_text: str) -> None:
         if CALIBRATION_MARK in cells[3]:
             marked += 1
 
-    def weeks(hours: int, pace: int) -> int:
-        return -(-hours // pace)
+    def weeks(hours: int | float, pace: int) -> int:
+        return int(-(-hours // pace))
 
-    m = re.search(rf"\*\*(\d+){DASH}(\d+) ч\*\*", text)
+    m = re.search(rf"\*\*({NUM}){DASH}({NUM}) ч\*\*", text)
     if not m:
         fail("README.md: не найден официальный итог «**N–M ч**»")
-    elif (int(m.group(1)), int(m.group(2))) != (total_low, total_high):
+    elif (_num(m.group(1)), _num(m.group(2))) != (total_low, total_high):
         fail(
             f"README.md: итог {m.group(1)}{DASH}{m.group(2)} ч, а построчная "
-            f"сумма 6.1 даёт {total_low}{DASH}{total_high}"
+            f"сумма 6.1 даёт {_fmt(total_low)}{DASH}{_fmt(total_high)}"
         )
     else:
-        ok(f"README.md: итог {total_low}{DASH}{total_high} ч — из построчной суммы 6.1")
+        ok(f"README.md: итог {_fmt(total_low)}{DASH}{_fmt(total_high)} ч — "
+           f"из построчной суммы 6.1")
 
     for pace in (25, 10):
         m = re.search(
@@ -2151,7 +2181,8 @@ def check_readme_student_entry(blueprint_text: str) -> None:
             fail(
                 f"README.md @{pace} ч/нед: {got_weeks[0]}{DASH}{got_weeks[1]} недель "
                 f"и {got_months[0]}{DASH}{got_months[1]} месяцев, а из итога "
-                f"{total_low}{DASH}{total_high} ч выходит {want_weeks[0]}{DASH}{want_weeks[1]} "
+                f"{_fmt(total_low)}{DASH}{_fmt(total_high)} ч выходит "
+                f"{want_weeks[0]}{DASH}{want_weeks[1]} "
                 f"и {want_months[0]}{DASH}{want_months[1]}"
             )
         else:
@@ -2178,7 +2209,7 @@ def check_readme_student_entry(blueprint_text: str) -> None:
                f"требуют калибровки» — из таблицы 6.1")
 
     part62 = section(blueprint_text, "## 6.2.", "## 6.3.")
-    stage_hours: list[tuple[int, int]] = []
+    stage_hours: list[tuple[int | float, int | float]] = []
     for line in part62.splitlines():
         if not line.startswith("|"):
             continue
@@ -2189,7 +2220,7 @@ def check_readme_student_entry(blueprint_text: str) -> None:
         if rng and parse_range(cells[3]) and parse_range(cells[4]):
             stage_hours.append(rng)
 
-    readme_hours: list[tuple[int, int]] = []
+    readme_hours: list[tuple[int | float, int | float]] = []
     for line in text.splitlines():
         if not line.startswith("|"):
             continue

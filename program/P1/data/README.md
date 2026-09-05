@@ -23,7 +23,7 @@ product/social/marketing), а не на готовые формулировки 
 | `generate_p1.py` | Генератор. Пишет `raw/sales_transactions.csv`. Детерминирован: `SEED = 20260821` до первого обращения к `random`, печатает число строк и sha256. | да |
 | `reference_p1.py` | Считает эталоны заново, независимо от внутренних списков генератора: контрольную сумму, худшую точку под двумя определениями выручки, ранжирование под двумя способами учёта ремонтных недель. Пишет `ref_by_store.csv`. | да |
 | `reference_answers.md` | Контрольная точка (sha256 + строки) и все эталонные числа проекта, с определением каждого (решение 30). | да |
-| `ref_by_store.csv` | 12 строк — по одной на точку: `net_revenue`, `gross_revenue`, `avg_weekly_flat26`, `avg_weekly_excl_closed`. | да |
+| `ref_by_store.csv` | 12 строк — по одной на точку: `net_revenue`, `gross_revenue`, `avg_weekly_flat26`, `avg_weekly_excl_closed`. `flat26` названа по округлённому числу недель, а считается делением на точное: 181 / 7 = 25.857 (`reference_p1.py`, `WEEKS`). | да |
 | `raw/sales_transactions.csv` | 57619 строк: `tx_id, store_id, city, street, tx_date, amount`. Четыре встроенных дефекта — см. `step-00.md`. | **нет** — создаётся генератором |
 
 ## Закрыто турникетом (решения 51 и 53)
